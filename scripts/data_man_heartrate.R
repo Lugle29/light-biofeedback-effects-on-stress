@@ -56,12 +56,6 @@ if (file.exists("heartrate/hrv_final.csv")) {
   cols_to_remove <- c('Filename', 'date')
   data <- data[, !(names(data) %in% cols_to_remove)]
   
-  # Rename Columns
-  #data <- data %>%
-    #rename(Log_Sek = TLPLogEvent_SekCount,
-           #Inq_Sek = InqEvent_SekCount,
-           #Tra_Sek = Training_SekCount)
-  
   # transform time variable
   data$time <- as_hms(data$time)
   
