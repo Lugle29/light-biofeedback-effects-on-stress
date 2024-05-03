@@ -34,11 +34,13 @@ quest <- read.csv("questionnaire/final_transformed.csv")
 if (file.exists("heartrate/hrv_final.csv")) {
   # if so read it
   data <- read.csv("heartrate/hrv_final.csv")
-  
+
+  # Change value for participant with wrong assignment 
   data$Training[data$ID == 'T3KK5X' & 
                   data$TLPLOGEvent == 'Pause1-Start' &
                   data$Log_Sek > 9 &
                   data$Log_Sek < 262] <- 'TrainingOn'
+  
   # transform time variable
   data$time <- as_hms(data$time)
 } else {
