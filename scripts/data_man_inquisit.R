@@ -211,20 +211,20 @@ rel_cols <- c('subjectid', 'Version','starttime', 'Durchgang', 'elapsedtime',
               'totalearnings', 'total_explosions', 'totalpumpcount')
 bart_sum <- bart_sum[rel_cols]
 
-# Transformation ---------------------------------------------------------------
-## Rename Column
+# Transform --------------------------------------------------------------------
+# Rename Column
 colnames(bart_sum)[1] <- 'ID'
 colnames(bart_sum)[2] <- 'version'
 
-## Manipulate Version
+# Manipulate Version
 bart_sum$version <- str_extract(bart_sum$version, '[1-9]')
 
-## Add Endtime
-### Transform elapsedtime from milliseconds to seconds
+# Add Endtime
+## Transform elapsedtime from milliseconds to seconds
 bart_sum$elapsedtime <- (bart_sum$elapsedtime/1000)
 bart_sum$endtime <- as_hms(round(bart_sum$starttime + bart_sum$elapsedtime))
 
-### Relocate Column
+## Relocate Column
 bart_sum <- bart_sum %>% 
   relocate('endtime', .after = 'starttime')
 
@@ -243,7 +243,7 @@ for (i in 3:length(colnames(bart_light))){
   colnames(bart_light)[i] <- paste0(colnames(bart_light)[i],'_l')
 }
 
-## Extract Non-Light Columns and Rename them
+# Extract Non-Light Columns and Rename them
 bart_nlight <- bart_sum[bart_sum$light == 'nlight',
                         !(names(bart_sum) %in% c('Durchgang', 'light', 'version'))]
 
@@ -251,11 +251,11 @@ for (i in 2:length(colnames(bart_nlight))){
   colnames(bart_nlight)[i] <- paste0(colnames(bart_nlight)[i],'_nl')
 }
 
-## Merge Dataframes
-### Merge
+# Merge Dataframes
+## Merge
 bart_sum_wide <- merge(bart_light, bart_nlight, by = 'ID')
 
-### Relocate Columns
+## Relocate Columns
 bart_sum_wide <- bart_sum_wide %>% 
   relocate('starttime_nl', .after = 'starttime_l') %>%
   relocate('endtime_nl', .after = 'endtime_l') %>%
