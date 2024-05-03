@@ -6,13 +6,13 @@ This project is part of my occupation as a research assistant. We conducted a st
 
 ## Preparation
 
-- create_study_plan.R: script for setting up an excel file containing participant IDs, randomized conditions, randomized light calibration sequence.
-- data_man_heartrate.R: script for preprocessing heartrate data, collected by POLAR device.
-- data_man_inquisit.R: script for preprocessing results of perfomance tests within the study.
-- data_man_quest.R: script for preprocessing the questionnaire data.
-- functions.R: script containing functions to support heartrate preprocessing. It was externalized to keep code of data_man_heartrate.R cleaner
-- semantic_differential.R: code for plotting semantic differentials. Authored by Justine Leon A. Uro - https://github.com/justineuro
+- **create_study_plan.R** - script for setting up an excel file containing participant IDs, randomized conditions, randomized light calibration sequence.
+- **data_man_heartrate.R** - script for preprocessing heartrate data, collected by POLAR device.
+- **data_man_inquisit.R** - script for preprocessing results of perfomance tests within the study.
+- **data_man_quest.R**  script for preprocessing the questionnaire data.
+- **functions.R** - script containing functions to support heartrate preprocessing. It was externalized to keep code of data_man_heartrate.R cleaner
+- **semantic_differential.R** - code for plotting semantic differentials. Authored by Justine Leon A. Uro - https://github.com/justineuro
 
 ## Analysis
 
-- analysis.Rmd: descriptive and inferential analysis written in markdown for enabling easy commented presentation of results.
+- **analysis.Rmd** - descriptive and inferential analysis written in markdown for enabling easy commented presentation of results.
