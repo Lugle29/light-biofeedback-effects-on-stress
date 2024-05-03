@@ -1,3 +1,15 @@
+## ---------------------------
+##
+## Script name: data_man_heartrate.R
+##
+## Purpose of script: preprocessing heartrate data, collected by POLAR device.
+##
+## Author: Luis Glenzer
+##
+## Date Created: 2024-03-25
+##
+## ---------------------------
+
 # Setup
 # Load Libraries---------------------------------------------------------------
 library(hms)
@@ -302,14 +314,17 @@ avg_hrv <- data.frame(ID = names(cpt_list),
                       cpt = avgs)
                       
 ### PASAT ### 
-# Get Data----------------------------------------------------------------------
+# Preparation ------------------------------------------------------------------
+# Get Data
 pasat_times <- read.csv('inquisit/PASAT.csv')
 pasat       <- data[data$TLPLOGEvent == 'PASAT-Start',]
 
-## Manipulate for further usage
+# Transform Timecolumn 
+# Manipulate for further usage
 pasat_times$lvl3_starttime <- as_hms(pasat_times$lvl3_starttime)
 pasat_times$lvl3_starttime <- as_hms(round(pasat_times$lvl3_starttime))
 
+# Get HRV for PASAT ------------------------------------------------------------
 # Get HRV vectors for PASAT LVL 3
 pasat_list <- list()
 for (id in quest$ID) {
@@ -346,32 +361,33 @@ for (id in quest$ID) {
   }
 }
 
-# Average the manipulated Vectors
+# Average the manipulated Vectors 
 ## Cut 60 sec from start for real RMSSD
-
 avgs <- c()
 for (id in names(pasat_list)) {
   avgs <- c(avgs, mean(pasat_list[[id]][['manip']],na.rm = TRUE))
 }
 
-# Add to Dataframe
+# Add to Dataframe -------------------------------------------------------------
 avg_hrv$pasat <- avgs
 
 # Clean Environment
 rm(list = ls()[!ls() %in% c('data', 'quest', 'avg_hrv', 'avg_vec', 'list_hrv')])
 
 ### Breaks ###
+# Prepare ----------------------------------------------------------------------
 # Subset for Break Data
 break_hrv <- data[data$TLPLOGEvent == 'Pause1-Start' |
                     data$TLPLOGEvent == 'Pause2-Start',]
 
+# Get HRV for breaks -----------------------------------------------------------
 # Get HRV Vectors
 break_list <- list_hrv(break_hrv,quest)
 
 # Extract Averaged Manipulated Vectors
 avgs <- avg_vec(break_list)
 
-# Add to Dataframe
+# Add to Dataframe -------------------------------------------------------------
 avg_hrv$break_l  <- avgs[['light']]
 avg_hrv$break_nl <- avgs[['nlight']]
 
@@ -380,18 +396,19 @@ rm(list = ls()[!ls() %in% c('data', 'quest', 'avg_hrv', 'avg_vec', 'list_hrv',
                             'plot_path')])
 ################################### Study Part II ##############################
 ### PVT ###
+# Prepare ----------------------------------------------------------------------
 # Subset for PVT Data
 pvt_hrv <- data[data$TLPLOGEvent == 'PVT1-Start' |
                   data$TLPLOGEvent == 'PVT2-Start',]
 
-# Get HRV Vectors
-## Prepare List
+# Prepare List to stor results in
 pvt_list <- list_hrv(pvt_hrv, quest)
 
+# Get HRV for PVT --------------------------------------------------------------
 # Extract Averaged Manipulated Vectors
 avgs <- avg_vec(pvt_list)
 
-# Add to Dataframe
+# Add to Dataframe -------------------------------------------------------------
 avg_hrv$pvt_l  <- avgs[['light']]
 avg_hrv$pvt_nl <- avgs[['nlight']]
 
@@ -400,25 +417,29 @@ rm(list = ls()[!ls() %in% c('data', 'quest', 'avg_hrv', 'avg_vec', 'list_hrv',
                             'plot_path')])
 
 ### BART ###
+# Prepare ----------------------------------------------------------------------
 # Subset for BART Data
 bart_hrv <- data[data$TLPLOGEvent == 'BART1-Start' |
                   data$TLPLOGEvent == 'BART2-Start',]
 
+# Get HRV for BART -------------------------------------------------------------
 # Get HRV Vectors
 bart_list <- list_hrv(bart_hrv, quest)
 
 # Extract Averaged Manipulated Vectors
 avgs <- avg_vec(bart_list)
 
-# Add to Dataframe
+# Add to Dataframe -------------------------------------------------------------
 avg_hrv$bart_l  <- avgs[['light']]
 avg_hrv$bart_nl <- avgs[['nlight']]
 
 # Clean Environment
 rm(list = ls()[!ls() %in% c('data', 'quest', 'avg_hrv', 'avg_vec', 'list_hrv')])
 
-# Save Files
+# Save Files -------------------------------------------------------------------
+# as csv
 write.csv(avg_hrv, 'heartrate/average_hrv.csv', row.names = FALSE)
+# as xlsx
 write_xlsx(avg_hrv, 'heartrate/average_hrv.xlsx')
 
 # Find Missing Values
