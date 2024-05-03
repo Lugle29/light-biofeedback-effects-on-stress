@@ -1,3 +1,17 @@
+## ---------------------------
+##
+## Script name: data_man_quest.R
+##
+## Purpose of script: preprocessing questionnaire data
+##
+## Author: Luis Glenzer
+##
+## Date Created: 2024-03-25
+##
+## ---------------------------
+
+# Setup
+#Load Libraries ----------------------------------------------------------------
 library(dplyr)
 library(tidyr)
 library(tibble)
@@ -8,21 +22,23 @@ library(xml2)
 library(stringr)
 library(writexl)
 
+# Set Datapath -----------------------------------------------------------------
 setwd(paste0(getwd(),'/data'))
-
 # Get Data
 data <- read.csv2(paste0(getwd(),'/questionnaire/','questionnaire.csv'))
 study_plan <- read_excel('study_plan_filled.xlsx')
 
-## Remove empty columns
+# Prepare ----------------------------------------------------------------------
+# Remove empty columns
 data <- data[,-c(1:4)]
 columns_to_remove <- c(grep("Studienleitung", names(data)),
                        grep("Pause", names(data)),
                        grep("Ende", names(data)))
 data <- data[, -columns_to_remove]
 
-## Clean faulty Column Values
-### UEQ
+# Transform --------------------------------------------------------------------
+# Clean faulty Column Values
+## UEQ
 data$UEQS1.SQ001. <- as.integer(gsub("^A", "", data$UEQS1.SQ001.))
 data$UEQS1.SQ002. <- as.integer(gsub("^A", "", data$UEQS1.SQ002.))
 data$UEQS2.SQ001. <- as.integer(gsub("^A", "", data$UEQS1.SQ003.))
@@ -30,7 +46,7 @@ data$UEQS2.SQ001. <- as.integer(gsub("^A", "", data$UEQS2.SQ001.))
 data$UEQS2.SQ002. <- as.integer(gsub("^A", "", data$UEQS2.SQ002.))
 data$UEQS2.SQ003. <- as.integer(gsub("^A", "", data$UEQS2.SQ003.))
 
-### Sehunterstützung
+## Sehunterstützung
 data$Sehunterstuetzung[data$Sehunterstuetzung == "N"] <- 0
 data$Sehunterstuetzung[data$Sehunterstuetzung == "Y"] <- 1
 data$Sehunterstuetzung <- as.integer(data$Sehunterstuetzung)
@@ -39,7 +55,7 @@ data$Sehunterstuetzung2[data$Sehunterstuetzung2 == ""] <- NA
 data$Sehunterstuetzung2[data$Sehunterstuetzung2 == "A1"] <- 'Brille'
 data$Sehunterstuetzung2[data$Sehunterstuetzung2 == "A2"] <- 'Linse'
 
-### Studium
+## Studium
 data$Semester <- as.integer(str_extract(data$Semester,'[1-9]'))
 data$Semester <- ifelse(data$Schulabschluss >= 6 & data$Semester >= 8,
                         data$Semester - 6, data$Semester)
@@ -47,21 +63,28 @@ data$Semester <- ifelse(data$Schulabschluss >= 6 & data$Semester >= 8,
 data$Stud_Circle <- ifelse(data$Schulabschluss == 6, 
                            'Master', 'Bachelor')
 
+### Relocate Column
 data <- data %>% 
   relocate('Stud_Circle', .after = 'Schulabschluss')
 
-### Eisbaden
+## Eisbaden
 data$Eisbaden[data$Eisbaden == "N"] <- 0
 data$Eisbaden[data$Eisbaden == "Y"] <- 1
 data$Eisbaden <- as.integer(data$Eisbaden)
 
-### Ishihara
+## Ishihara
 data$Ishihara <- as.double(data$Ishihara)
 data$Ishihara[data$Ishihara < 1] <- data$Ishihara[data$Ishihara < 1] * 100
 
 # Merge Data
-data <- merge(study_plan[c('ID','testing_version','calib_frequency','calib_color','sex_numerical')], 
+data <- merge(study_plan[c('ID',
+                           'testing_version',
+                           'calib_frequency',
+                           'calib_color',
+                           'sex_numerical')], 
               data, by = 'ID')
+
+# Change Version Column
 data$testing_version <- ifelse(data$testing_version == 'Ver_1',1,2)
 
 # Rename Columns
@@ -70,9 +93,40 @@ colnames(data)[colnames(data) %in% c('testing_version',
                                      'calib_color',
                                      'sex_numerical')] <- c('version', 'frequency', 'color', 'sex')
 
-# Add config data
+## KAB
+# Get Relevant Column Names
+kab_columns      <- grep('^KAB', names(data), value = TRUE)
+items_to_rescale <- c(2,4,6)
+
+# Rescale
+for (col in kab_columns) {
+  # Get Item Number
+  ## It is relevant to seperate KAB Numbers as in questionnaire construction
+  ## there was a mistake such that KAB1-2 ranges from 0-5 while the rest ranges
+  ## from 1-6
+  kab_no   <- str_extract(col, "[-+]?\\d*\\.?\\d+")
+  kab_no   <- as.numeric(kab_no)
+  
+  kab_item <- str_extract_all(col, "\\d(?!.*\\d)")[[1]]
+  kab_item <- as.numeric(kab_item)
+  
+  # Rescale if the item number matches the one to transform
+  if (kab_item %in% items_to_rescale) {
+    if (kab_no <= 2) {
+      max_value <- 5
+      data[col] <- (max_value - data[col])
+    } else {
+      max_value <- 6
+      data[col] <- (max_value - (data[col] - 1))
+    }
+  }
+}
+
+# Add additional data ----------------------------------------------------------
+# Get Config data
 filenames <- list.files(paste0(getwd(),'/config'))
 
+# Read Config Data
 config <- function(df = data,
                    files = filenames){
   for (file in files){
@@ -112,15 +166,19 @@ for (name in colnames(data)){
   i = i + 1
 }
 
-## Rescale VAS, such that 'no stress' equals 0
+# Rescale VAS, such that 'no stress' equals 0
 col_to_rescale <- c('VAS1_1', 'VAS2_1', 'VAS3_1',
                     'VAS4_1', 'VAS5_1', 'VAS6_1')
+
 for (col in col_to_rescale){
   data[col] <- (data[col] - 1)
 }
 
+# Save -------------------------------------------------------------------------
 write.csv(data, paste0(getwd(),'/questionnaire/final.csv'), row.names = FALSE)
 
+### Health Data ###
+# Transform --------------------------------------------------------------------
 # Compute Health Scores after https://heartbeat-med.com/de/resources/whoqol-bref/
 data$phy_health <- 4*((6 - data$QOLErl_3) + (6 - data$QOLErl_4) + 
                         data$QOLMoeg_10 + data$QOLFort_15 + data$QOLZuf_16 + 
@@ -157,60 +215,38 @@ data <- data %>%
              'env_health'), .after = 'Ishihara')
 
 
-# Change Columns based on version such that columns can be renamed after light/no_light ####
-## Study Part I
-### Rescale KAB Colums
-#### Get Relevant Column Names
+# Change Columns based on condition
 
-kab_columns      <- grep('^KAB', names(data), value = TRUE)
-items_to_rescale <- c(2,4,6)
+# Study Part I
 
-#### Rescale
-for (col in kab_columns) {
-  # Get Item Number
-  ## It is relevant to seperate KAB Numbers as in questionnaire construction
-  ## there was a mistake such that KAB1-2 ranges from 0-5 while the rest ranges
-  ## from 1-6
-  kab_no   <- str_extract(col, "[-+]?\\d*\\.?\\d+")
-  kab_no   <- as.numeric(kab_no)
-  
-  kab_item <- str_extract_all(col, "\\d(?!.*\\d)")[[1]]
-  kab_item <- as.numeric(kab_item)
-  
-  # Rescale if the item number matches the one to transform
-  if (kab_item %in% items_to_rescale) {
-    if (kab_no <= 2) {
-      max_value <- 5
-      data[col] <- (max_value - data[col])
-    } else {
-      max_value <- 6
-      data[col] <- (max_value - (data[col] - 1))
-    }
-  }
-}
-
-### VAS, UEQ_S, KAB light
-#### Create Column Vectors
+### VAS, UEQ_S, KAB light ###
+# Prepare ----------------------------------------------------------------------
+# Create Column Vectors
 col_ver1_l <- c('ID', 'version', 'VAS3_1', 'UEQS1_1', 'UEQS1_2', 'UEQS1_3',
                 'KAB1_01','KAB1_02','KAB1_03','KAB1_04','KAB1_05','KAB1_06')
 col_to_repl_l <- c('VAS3_l', 'UEQS11_l', 'UEQS12_l', 'UEQS13_l', 'KAB11_l',
                  'KAB12_l','KAB13_l','KAB14_l','KAB15_l','KAB16_l')
 
+# Rearrange --------------------------------------------------------------------
 ver1_l <- data[data$version == 1, col_ver1_l]
 colnames(ver1_l)[3:length(ver1_l)] <- col_to_repl_l
   
 col_ver2_l <- c('ID', 'version', 'VAS6_1', 'UEQS2_1', 'UEQS2_2', 'UEQS2_3',
                 'KAB2_01','KAB2_02','KAB2_03','KAB2_04','KAB2_05','KAB2_06')
+
 ver2_l <- data[data$version == 2, col_ver2_l]
 colnames(ver2_l)[3:length(ver2_l)] <- col_to_repl_l 
 
+# Merge ------------------------------------------------------------------------
 col_l <- rbind(ver1_l,ver2_l)
 
-### VAS, UEQ_S, KAB non-light
+### VAS, UEQ_S, KAB non-light ###
+# Prepare ----------------------------------------------------------------------
 col_ver1_nl <- col_ver2_l
 col_to_repl_nl <- c('VAS3_nl', 'UEQS11_nl', 'UEQS12_nl', 'UEQS13_nl', 'KAB11_nl',
                  'KAB12_nl','KAB13_nl','KAB14_nl','KAB15_nl','KAB16_nl')
 
+# Rearrange --------------------------------------------------------------------
 ver1_nl <- data[data$version == 1, col_ver1_nl]
 colnames(ver1_nl)[3:length(ver1_nl)] <- col_to_repl_nl
 
@@ -219,13 +255,15 @@ col_ver2_nl <- col_ver1_l
 ver2_nl <- data[data$version == 2, col_ver2_nl]
 colnames(ver2_nl)[3:length(ver2_nl)] <- col_to_repl_nl 
 
+# Merge ------------------------------------------------------------------------
 col_nl <- rbind(ver1_nl,ver2_nl)
 
-### Implement VAS, UEQ_S, KAB_(non)light column in data
+# Conclude ---------------------------------------------------------------------
+# Implement VAS, UEQ_S, KAB_(non)light column in data
 data <- merge(data, col_l[,c('ID',col_to_repl_l)], by = "ID", all.x = TRUE)
 data <- merge(data, col_nl[,c('ID',col_to_repl_nl)], by = "ID", all.x = TRUE)
 
-### Rename Columns
+# Rename Columns
 data <- data %>%
   rename(VAS_pre_CPT     = VAS1_1,
          VAS_pos_CPT     = VAS2_1,
@@ -252,13 +290,16 @@ data <- data %>%
          KAB_PASAT_5     = KAB2_05,
          KAB_PASAT_6     = KAB2_06)
 
-### Clean the environment
+# Clean the environment
 rm(list = ls()[!ls() %in% "data"])
 
 ## Study Part II
-### PVT
-#### Light
-##### Version 1
+
+### PVT ###
+# Light
+## Version 1
+# Prepare ----------------------------------------------------------------------
+# Get relevant columns
 col_v1_l <- c('ID', 'version')
 for (name in colnames(data)){
   if (str_detect(name, "KAB3") |
@@ -269,15 +310,19 @@ for (name in colnames(data)){
   }
 }
 
+# Specify light columns
 col_repl_l <- c(paste0(rep('KAB_pre_',6),rep('PVT_l',6),rep(1:6)),
                 paste0(rep('KAB_pos_',6),rep('PVT_l',6),rep(1:6)),
                 paste0(rep('UEQ_',8),rep('PVT_l',8),rep(1:8)),
                 paste0(rep('SBS_',3),rep('PVT_l',3),rep(1:3)))
 
+# Rearrange --------------------------------------------------------------------
 ver1_l <- data[data$version == 1, col_v1_l]
 colnames(ver1_l)[3:length(ver1_l)] <- col_repl_l
 
-##### Version 2
+## Version 2
+# Prepare ----------------------------------------------------------------------
+# Get relevant columns
 col_v2_l <- c('ID', 'version')
 for (name in colnames(data)){
   if (str_detect(name, "KAB7") |
@@ -288,45 +333,58 @@ for (name in colnames(data)){
   }
 }
 
+# Rearrange Columns
 ver2_l <- data[data$version == 2, col_v2_l]
 colnames(ver2_l)[3:length(ver2_l)] <- col_repl_l
 
+# Merge ------------------------------------------------------------------------
 col_l <- rbind(ver1_l,ver2_l)
 
-#### Non-Light
-##### Version 1
+# Non-Light
+## Version 1
+# Prepare ----------------------------------------------------------------------
+# Get relevant columns
 col_v1_nl <- col_v2_l
 
+# Specify non-light columns
 col_repl_nl <- c(paste0(rep('KAB_pre_',6),rep('PVT_nl',6),rep(1:6)),
                  paste0(rep('KAB_pos_',6),rep('PVT_nl',6),rep(1:6)),
                  paste0(rep('UEQ_',8),rep('PVT_nl',8),rep(1:8)),
                  paste0(rep('SBS_',3),rep('PVT_nl',3),rep(1:3)))
 
+# Rearrange --------------------------------------------------------------------
 ver1_nl <- data[data$version == 1, col_v1_nl]
 colnames(ver1_nl)[3:length(ver1_nl)] <- col_repl_nl
 
-##### Version 2
+## Version 2
+# Prepare ----------------------------------------------------------------------
+# Get relevant columns
 col_v2_nl <- col_v1_l
 
+# Rearrange --------------------------------------------------------------------
 ver2_nl <- data[data$version == 2, col_v2_nl]
 colnames(ver2_nl)[3:length(ver2_nl)] <- col_repl_nl
 
+# Merge ------------------------------------------------------------------------
 col_nl <- rbind(ver1_nl,ver2_nl)
 
-### Implement VAS_(non)light column in data
+# Conclude ---------------------------------------------------------------------
+# Implement PVT_(non)light column in data
 data <- merge(data, col_l[,c('ID',col_repl_l)], by = "ID", all.x = TRUE)
 data <- merge(data, col_nl[,c('ID',col_repl_nl)], by = "ID", all.x = TRUE)
 
-### Drop Unused Columns
+# Drop Unused Columns
 remove_cols <- c(col_v1_l[3:length(col_v1_l)], col_v1_nl[3:length(col_v1_nl)])
 data = subset(data, select = !(colnames(data) %in% remove_cols))
 
 # Clean the environment
 rm(list = ls()[!ls() %in% "data"])
 
-### BART
-#### Light
-##### Version 1
+### BART ###
+# Light
+# Version 1
+# Prepare ----------------------------------------------------------------------
+# Get relevant columns
 col_v1_l <- c('ID', 'version')
 for (name in colnames(data)){
   if (str_detect(name, "KAB5") |
@@ -337,15 +395,19 @@ for (name in colnames(data)){
   }
 }
 
+# Specify light columns
 col_repl_l <- c(paste0(rep('KAB_pre_',6),rep('BART_l_',6),rep(1:6)),
                 paste0(rep('KAB_pos_',6),rep('BART_l_',6),rep(1:6)),
                 paste0(rep('UEQ_',8),rep('BART_l_',8),rep(1:8)),
                 paste0(rep('SBS_',3),rep('BART_l_',3),rep(1:3)))
 
+# Rearrange --------------------------------------------------------------------
 ver1_l <- data[data$version == 1, col_v1_l]
 colnames(ver1_l)[3:length(ver1_l)] <- col_repl_l
 
-##### Version 2
+# Version 2
+# Prepare ----------------------------------------------------------------------
+# Get relevant columns
 col_v2_l <- c('ID', 'version')
 for (name in colnames(data)){
   if (str_detect(name, "KAB9") |
@@ -356,42 +418,55 @@ for (name in colnames(data)){
   }
 }
 
+# Rearrange --------------------------------------------------------------------
 ver2_l <- data[data$version == 2, col_v2_l]
 colnames(ver2_l)[3:length(ver2_l)] <- col_repl_l
 
+# Merge ------------------------------------------------------------------------
 col_l <- rbind(ver1_l,ver2_l)
 
-#### Non-Light
-##### Version 1
+# Non-Light
+## Version 1
+# Prepare ----------------------------------------------------------------------
+# Get relevant columns
 col_v1_nl <- col_v2_l
 
+# Specify non-light columns
 col_repl_nl <- c(paste0(rep('KAB_pre_',6),rep('BART_nl_',6),rep(1:6)),
                  paste0(rep('KAB_pos_',6),rep('BART_nl_',6),rep(1:6)),
                  paste0(rep('UEQ_',8),rep('BART_nl_',8),rep(1:8)),
                  paste0(rep('SBS_',3),rep('BART_nl_',3),rep(1:3)))
 
+# Rearrange --------------------------------------------------------------------
 ver1_nl <- data[data$version == 1, col_v1_nl]
 colnames(ver1_nl)[3:length(ver1_nl)] <- col_repl_nl
 
-##### Version 2
+## Version 2
+# Prepare ----------------------------------------------------------------------
+# Get relevant columns
 col_v2_nl <- col_v1_l
 
+# Rearrange --------------------------------------------------------------------
 ver2_nl <- data[data$version == 2, col_v2_nl]
 colnames(ver2_nl)[3:length(ver2_nl)] <- col_repl_nl
 
+# Merge ------------------------------------------------------------------------
 col_nl <- rbind(ver1_nl,ver2_nl)
 
-### Implement VAS_(non)light column in data
+# Conclude ---------------------------------------------------------------------
+# Implement BART_(non)light column in data
 data <- merge(data, col_l[,c('ID',col_repl_l)], by = "ID", all.x = TRUE)
 data <- merge(data, col_nl[,c('ID',col_repl_nl)], by = "ID", all.x = TRUE)
 
-### Drop Unused Columns
+# Drop Unused Columns
 remove_cols <- c(col_v1_l[3:length(col_v1_l)], col_v1_nl[3:length(col_v1_nl)])
 data = subset(data, select = !(colnames(data) %in% remove_cols))
 
 # Clean the environment
 rm(list = ls()[!ls() %in% "data"])
 
-# Save Final File ####
+# Save -------------------------------------------------------------------------
+# as csv
 write.csv(data, paste0(getwd(),'/questionnaire/final_transformed.csv'), row.names = FALSE)
+# as xlsx
 write_xlsx(data, paste0(getwd(),'/questionnaire/final_transformed.xlsx'))
