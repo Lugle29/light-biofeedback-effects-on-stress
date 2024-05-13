@@ -1,0 +1,3779 @@
+---
+title: 'ECCE - Analysis'
+author: 'Luis Glenzer'
+date: '2024-03-29'
+output:
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# Libraries
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(psych)
+library(gridExtra)
+library(readr)
+library(goftest)
+library(MASS)
+library(fitdistrplus)
+library(DescTools)
+library(stringr)
+library(lme4)
+library(lmerTest)
+library(rsq)
+library(lattice)
+library(gglm)
+library(rstatix)
+library(car)
+library(RColorBrewer)
+
+source('scripts/semantic_differential.R')
+
+# Get Data
+setwd(paste0(getwd(),'/data'))
+data <- read.csv(paste0(getwd(),'/questionnaire/','final_transformed.csv'))
+```
+
+# Questionnaire Data
+
+First of all, demographics like Age and Semester Count will be presented. Furthermore the score of Ishihara Test and Health Variables is summarized. Variables which are not included are: Gender, Medication and Diagnosis. The reason therefore is the selection criteria, such that the study was conducted with the same proportion of males and females. Further, people with actual diagnosis or medication were not included in the study.
+
+```{r, echo=FALSE}
+summary(data[c('Alter','Semester','Ishihara','phy_health', 'psy_health', 'soc_health', 'env_health')])
+```
+
+## Age:
+
+Sex is coded as 0 = male, 1 = female
+
+```{r, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+data$sex <- factor(data$sex, labels = c('Male', 'Female'))
+
+# Make Plot --------------------------------------------------------------------
+ggplot(data, aes(x = Alter, fill = sex)) + 
+  # Plot Histogram
+  geom_histogram(binwidth = 1, position = 'dodge')  +
+  # Customize Plot
+  labs(x = 'Age',
+       y = 'Number of Participants',
+       fill = 'Sex',
+       title = 'Histogram Age by Sex')
+```
+
+There is an outlier at Age = 35, which is not meant to be in the sample. However, as the data points are necessary, it will be left in the data set.
+
+The Age between both sexes seems slightly shifted. Therefore a Mann-Whitney-U Test will be conducted to test if age distributions are the same for both sexes:
+
+```{r, echo=FALSE}
+# Make Plot -------------------------------------------------------------------------
+ggplot(data, aes(x = sex, y = Alter)) +
+  # Make Boxplot
+  geom_boxplot(fill = 'aquamarine3') +
+  # Add Mean Indicator
+  stat_summary(fun = mean, geom = 'point', 
+               shape = 18, size = 3, color = 'black', 
+               position = position_dodge(width = 0.75),
+               show.legend = FALSE) +
+  # Customize Plot
+  labs(x = 'Sex', 
+       y = 'Age', 
+       title = 'Boxplot of Age by Sex')
+
+# Wilcoxon Test ----------------------------------------------------------------
+wilcox.test(Alter~sex, data = data, 
+            exact = FALSE, 
+            correct = FALSE, 
+            conf.int = FALSE)
+```
+
+The Boxplot and MWU (Wilcoxon Test) revealed that there is no statistical significant difference in Age between both sexes
+
+```{r, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+data$version <- as.factor(data$version)
+
+# Make Plot --------------------------------------------------------------------
+ggplot(data, aes(x = Alter, fill = version)) + 
+  # Make Histogram
+  geom_histogram(binwidth = 1,position = 'dodge') +
+  # Customize Plot
+  labs(x = 'Age',
+       y = 'Number of Participants',
+       fill = 'Version',
+       title = 'Histogram Age by Version')
+```
+
+The Age between both versions seems slightly shifted. Here also a Mann-Whitney-U Test will be conducted to test if age distributions are the same for both versions:
+
+```{r, echo=FALSE}
+# Make Plot --------------------------------------------------------------------
+ggplot(data, aes(x = version, y = Alter)) +
+  # Make Boxplot
+  geom_boxplot(fill = 'aquamarine3') +
+  # Add Mean Indicator
+  stat_summary(fun = mean, geom = 'point', 
+               shape = 18, size = 3, color = 'black', 
+               position = position_dodge(width = 0.75),
+               show.legend = FALSE) +
+  # Customize Plot
+  labs(x = 'Sex', 
+       y = 'Age', 
+       title = 'Boxplot of Age by Version')
+
+# Wilcoxon Test ----------------------------------------------------------------
+wilcox.test(Alter~version, data = data, 
+            exact = FALSE, 
+            correct = FALSE, 
+            conf.int = FALSE)
+```
+
+The Boxplot and Wilcoxon Test revealed that there is no statistical significant difference in Age between both versions.
+
+## Semester:
+
+A histogram should display the distribution of Semester. The data sets are split between Bachelor and Master as the circles are not the same length.
+
+```{r, echo = FALSE}
+# Prepare ----------------------------------------------------------------------
+# Factorize Study Circle
+data$Stud_Circle <- as.factor(data$Stud_Circle)
+
+# Make Plot --------------------------------------------------------------------
+ggplot(data, aes(x = Semester, fill = Stud_Circle)) + 
+  # Plot Histogram 
+  geom_histogram(binwidth = 1, position = 'dodge', na.rm=TRUE) +
+  # Scale Axis
+  scale_x_continuous(breaks = seq(1, 9, by = 1), limits = c(0,9)) +
+  scale_y_continuous(breaks = seq(1, 15, by = 1), limits = c(0,15)) +
+  # Customize Plot
+  labs(x = 'Semester', 
+       y = 'Number of Participants', 
+       title = 'Histogram of Semester Count by Study Circle',
+       fill = 'Study Circle')
+```
+
+As expected, higher frequencies of higher semesters were observed in bachelor students and there were more bachelor students in the sample. Probably due to the offer of test subject hours.
+
+## Study Circle
+
+Further it is important to see if there are differences in frequencies of the Study Circle between the versions.
+
+```{r, echo=FALSE}
+# Make Plot --------------------------------------------------------------------
+ggplot(data, aes(x = factor(Stud_Circle), fill = version)) +
+  # Plot Barplot
+  geom_bar(position = 'dodge', color = 'black', width = .5) +
+  # Customize Plot
+  labs(title = 'Frequency of Study Circle',
+       x = 'Circle',
+       y = 'Number of Participants') +
+  ylim(0,38)
+```
+
+Based on the plot it does not seem like there are differences. It will be checked with a Chi^2^-Test.
+
+```{r, echo=FALSE}
+# Prepare ---------------------------------------------------------------------- 
+contingency_table <- table(as.factor(data$Stud_Circle), as.factor(data$version))
+
+# Chi2 Test --------------------------------------------------------------------
+chi_sq_test <- chisq.test(contingency_table)
+
+# Print Results
+print(chi_sq_test)
+```
+
+There is no statistical significance for a difference on Study Circle between the two groups. Randomization was successful w.r.t. Study Circle.
+
+## Health Scores:
+
+```{r, echo=FALSE}
+# Summary Health ---------------------------------------------------------------
+summary(data[c('phy_health', 'psy_health', 'soc_health', 'env_health')])
+```
+
+Overall Health was good with means of: - Physical Health: `r mean(data$phy_health)` - Psychological Health: `r mean(data$psy_health)` - Social Health: `r mean(data$soc_health)` - Environmental Health: `r mean(data$env_health)`
+
+Distributions between both versions are shown in the following plot:
+
+```{r, box plot health, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Reshape Data
+data_long <- gather(data[c('version',
+                           'phy_health',
+                           'psy_health',
+                           'soc_health',
+                           'env_health')], variable, value, -version)
+# Factorize Version
+data_long$version <- as.factor(data_long$version)
+
+# Factorize Dimensions
+data_long$variable <- factor(data_long$variable,
+                             levels = c('phy_health',
+                                        'psy_health',
+                                        'env_health',
+                                        'soc_health'),
+                             labels = c('Physical',
+                                        'Psychological',
+                                        'Environmental',
+                                        'Social'))
+
+# Make Plot --------------------------------------------------------------------
+ggplot(data_long, aes(x=variable, y=value, fill=version)) + 
+  # Make Boxplots
+  geom_boxplot() +
+  # Add Mean Indicator
+  stat_summary(fun = mean, geom = 'point', 
+               shape = 18, size = 3, color = 'black', 
+               position = position_dodge(width = 0.75),
+               show.legend = FALSE) +
+  # Customize Plot
+  labs(title = 'Health Variables by Version',
+       x = 'Dimensions',
+       y = 'Health Score',
+       fill = 'Version')
+```
+
+To asses, if the versions differed by their health scores, the same analysis via Wilcoxon Tests will be performed for the health variables.
+
+```{r, echo=FALSE}
+# Wilcoxon tests to assess, if health scores vary by version
+# Environmental ----------------------------------------------------------------
+print('Wilcoxon Test for Environmental Health')
+wilcox.test(env_health~version, data = data, 
+            exact = FALSE, 
+            correct = FALSE, 
+            conf.int = FALSE)
+
+# Physical ---------------------------------------------------------------------
+print('Wilcoxon Test for Physical Health')
+wilcox.test(phy_health~version, data = data, 
+            exact = FALSE, 
+            correct = FALSE, 
+            conf.int = FALSE)
+
+# Psychological ----------------------------------------------------------------
+print('Wilcoxon Test for Psychological Health')
+wilcox.test(psy_health~version, data = data, 
+            exact = FALSE, 
+            correct = FALSE, 
+            conf.int = FALSE)
+
+# Social -----------------------------------------------------------------------
+print('Wilcoxon Test for Social Health')
+wilcox.test(soc_health~version, data = data, 
+            exact = FALSE, 
+            correct = FALSE, 
+            conf.int = FALSE)
+```
+
+The tests reveal, that all four metrics do not differ by version, such that it can be concluded that randomization w.r.t health scores was successful.
+
+## Visual Aid and Ice Bathing:
+
+### Visual Aid
+
+The frequency of required visual aid, split by version was plotted by a histogram.
+
+```{r, echo=FALSE}
+# Make Plot --------------------------------------------------------------------
+ggplot(data, aes(x = factor(Sehunterstuetzung), fill = version)) +
+  # Make Barplot
+  geom_bar(position = 'dodge', color = 'black', width = .5) +
+  # Customize Plot
+  labs(title = 'Frequency of Required Visual Aid',
+       x = 'Answer',
+       y = 'Number of Participants',
+       fill = 'Version') +
+  # Scale Axis
+  scale_x_discrete(labels = c('0' = 'No', '1' = 'Yes')) +
+  ylim(0,35)
+```
+
+Most People did not require visual aid. Here again, no difference between versions can be assumed. This will be tested by a Chi^2^-Test.
+
+```{r, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+contingency_table <- table(as.factor(data$Sehunterstuetzung),
+                           as.factor(data$version))
+
+# Chi2 Test --------------------------------------------------------------------
+chi_sq_test <- chisq.test(contingency_table)
+
+# Print Results ----------------------------------------------------------------
+print(chi_sq_test)
+```
+
+According to the Chi^2^ Test, there are no significant differences between the versions.
+
+### Ice Bathing
+
+The frequency of experience with ice bathing, split by version was plotted by a histogram.
+
+```{r, echo=FALSE}
+# Make Plot --------------------------------------------------------------------
+ggplot(data, aes(x = factor(Eisbaden), fill = version)) +
+  # Plot Barplot
+  geom_bar(position = 'dodge', color = 'black', width = .5) +
+  # Customize Plot
+  labs(title = 'Frequency of Experience with Ice Bathing',
+       x = 'Answer',
+       y = 'Number of Participants',
+       fill = 'Version') +
+  # Scale Axis
+  scale_x_discrete(labels = c('0' = 'No', '1' = 'Yes')) +
+  ylim(0,40)
+```
+
+Most people do not regularly engage in ice bathing. Here it seems like there could be a possible effect of version. This will again be tested with a Chi^2^ Test.
+
+```{r, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+contingency_table <- table(as.factor(data$Eisbaden),
+                           as.factor(data$version))
+
+# Chi2 Test --------------------------------------------------------------------
+chi_sq_test <- chisq.test(contingency_table)
+
+# Print Results ----------------------------------------------------------------
+print(chi_sq_test)
+```
+
+As indicated by the plot, the difference is slightly higher than for visual aid but still does not yield statistical significance. Therefore, for these variables a successful randomization is assumed.
+
+## Subjective Stress:
+
+In Study Part 1, subjective stress was collected before and after stress induction (CPT and PASAT C) and after the 5 minute break (light/no-light). In Condition 1, the light break was after CPT and in Condition 2, the light break was after PASAT-C.
+
+```{r, echo=FALSE}
+# Summary Subjective Stress Scores ---------------------------------------------
+summary(data[c('VAS_pre_CPT', 'VAS_pos_CPT', 'VAS_bre_CPT', 'VAS_pre_PASAT', 
+               'VAS_pos_PASAT', 'VAS_bre_PASAT', 'VAS3_l', 'VAS3_nl')])
+```
+
+The first impression by the summary is, that mean and median are close together. While $\mathcal{N}$ will be tested in the following paragraphs, it can be assumed by this summary.
+
+```{r, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Reshape Data for Plotting
+data_long <- gather(data[c('version',
+                           'VAS_pre_CPT', 
+                           'VAS_pos_CPT', 
+                           'VAS_pre_PASAT', 
+                           'VAS_pos_PASAT',
+                           'VAS3_l',
+                           'VAS3_nl')], variable, value, -version)
+
+# Define the custom order of variables
+custom_order <- c('VAS_pre_CPT', 'VAS_pos_CPT', 'VAS_pre_PASAT', 'VAS_pos_PASAT', 'VAS3_l', 'VAS3_nl')
+
+# Make Plots -------------------------------------------------------------------
+ggplot(data_long, aes(x = factor(variable, levels = custom_order),
+                      y = value,
+                      fill = version)) +
+  # Make Boxplot
+  geom_boxplot() +
+  # Add Mean Indicator
+  stat_summary(fun = mean, geom = 'point', 
+               shape = 18, size = 3, color = 'black', 
+               position = position_dodge(width = 0.75),
+               show.legend = FALSE) +
+  # Rename Variable Indicators
+  scale_x_discrete(labels = c('VAS_pre_CPT'   = 'Pre-CPT',
+                              'VAS_pos_CPT'   = 'Post-CPT',
+                              'VAS_pre_PASAT' = 'Pre-PASAT',
+                              'VAS_pos_PASAT' = 'Post-PASAT',
+                              'VAS3_l'        = 'Light-Break',
+                              'VAS3_nl'       = 'Non-Light-Break')) +
+  # Customize Plot
+  labs(x     = 'Time',
+       y     = 'Stress Score',
+       fill  = 'Version',
+       title = 'Subjective Stress over Time by Version')
+```
+
+At first glance, both versions do not vary in their subjective Stress, at least not before and immediately after stress induction. The CPT seemed not to increase stress at least after removing the hand. Contrary, participants were more stressed after PASAT. A line plot will provide further insights. As this is using means of the conditions, distributions and similarity will be checked.
+
+### Check on Successful Randomization
+
+For every distribution the similarity between both versions will be assessed by Wilcoxon-Rank-Sum tests:
+
+```{r, echo=FALSE}
+# Wilcoxon tests to assess, if subjectove stress scores vary by version
+# Pre CPT ----------------------------------------------------------------------
+# Indicate Variable
+print('Wilcoxon Test on VAS Pre CPT')
+# Wilcoxon Test
+wilcox <- wilcox.test(data$VAS_pre_CPT~version, data = data, 
+                      exact = FALSE,
+                      correct = FALSE, 
+                      conf.int = FALSE)
+# Print Result
+print(wilcox)
+
+# Post CPT ---------------------------------------------------------------------
+# Indicate Variable
+print('Wilcoxon Test on VAS Post CPT')
+# Wilcoxon Test
+wilcox <- wilcox.test(data$VAS_pos_CPT~version, data = data, 
+                      exact = FALSE,
+                      correct = FALSE, 
+                      conf.int = FALSE)
+# Print Result
+print(wilcox)
+
+# Pre PASAT --------------------------------------------------------------------
+# Indicate Variable
+print('Wilcoxon Test on VAS Pre PASAT')
+# Wilcoxon Test
+wilcox <- wilcox.test(data$VAS_pre_PASAT~version, data = data, 
+                      exact = FALSE,
+                      correct = FALSE, 
+                      conf.int = FALSE)
+# Print Result
+print(wilcox)
+
+# Post PASAT -------------------------------------------------------------------
+# Indicate Variable
+print('Wilcoxon Test on VAS Post PASAT')
+# Wilcoxon Test
+wilcox <- wilcox.test(data$VAS_pos_PASAT~version, data = data, 
+                      exact = FALSE,
+                      correct = FALSE, 
+                      conf.int = FALSE)
+# Print Result
+print(wilcox)
+
+# Light Break ------------------------------------------------------------------
+# Indicate Variable
+print('Wilcoxon Test on Light Break')
+# Wilcoxon Test
+wilcox <- wilcox.test(data$VAS3_l~version, data = data, 
+                      exact = FALSE,
+                      correct = FALSE, 
+                      conf.int = FALSE)
+# Print Result
+print(wilcox)
+
+# Non-Light Break --------------------------------------------------------------
+# Indicate Variable
+print('Wilcoxon Test on Non-Light Break')
+# Wilcoxon Test
+wilcox <- wilcox.test(data$VAS3_nl~version, data = data, 
+                      exact = FALSE,
+                      correct = FALSE, 
+                      conf.int = FALSE)
+# Print Result
+print(wilcox)
+```
+
+The results of the Wilcoxon-Test are non-significant so that it can be concluded that there are no differences in the distributions for each VAS-Measurement instead of the Non-Light Break. But as the distributions before and after the stress induction are the important ones, this poses no issue.
+
+### Tests on $\mathcal{N}$
+
+The distributions of subjective stress will be tested on $\mathcal{N}$ with Shapiro-Wilk Tests and QQ-Plots.
+
+```{r, echo=FALSE}
+# Test VAS-Variables on Normality
+# Preparation ------------------------------------------------------------------
+cols_check <- c('VAS_pre_CPT',
+                'VAS_pos_CPT',
+                'VAS_pre_PASAT',
+                'VAS_pos_PASAT',
+                'VAS3_l',
+                'VAS3_nl')
+
+# Shapiro-Wilk Tests -----------------------------------------------------------
+for (col in cols_check) {
+  # Indicate Variable
+  cat('Test for normality in:',col,'\n')
+  cat('Version 1 \n')
+  # Print Results
+  print(shapiro.test(data[data$version == 1, col]))
+  
+  # Print Results
+  cat('Version 2 \n')
+  print(shapiro.test(data[data$version == 2, col]))
+  
+  # Print Results
+  cat('Combined \n')
+  print(shapiro.test(data[,col]))
+}
+
+#  Make Plots ------------------------------------------------------------------
+# Define layout with two plots side by side
+par(mfrow = c(2, 3))
+  
+# Define Fontsize
+cex_value <- 0.5
+  
+# QQ-Plot 1
+PlotQQ(data[, cols_check[1]], main = paste('QQ-Plot for',cols_check[1]), cex = cex_value)
+# QQ-Plot 2
+PlotQQ(data[, cols_check[2]], main = paste('QQ-Plot for',cols_check[2]), cex = cex_value)
+# QQ-Plot 3
+PlotQQ(data[, cols_check[3]], main = paste('QQ-Plot for',cols_check[3]), cex = cex_value)
+# QQ-Plot 4
+PlotQQ(data[, cols_check[4]], main = paste('QQ-Plot for',cols_check[4]), cex = cex_value)
+# QQ-Plot 5
+PlotQQ(data[, cols_check[5]], main = paste('QQ-Plot for',cols_check[5]), cex = cex_value)
+# QQ-Plot 6
+PlotQQ(data[, cols_check[6]], main = paste('QQ-Plot for',cols_check[6]), cex = cex_value)
+
+# Reset the layout
+par(mfrow = c(1, 1))
+
+```
+
+All SW-Tests reveal p-values indicating significance for non-normal distribution. It has to be noted, that this tests get less reliable for increasing $N$. Therefore, for the combined check, the p-value is smaller as for the tests on single versions and interpretation is limited. The QQ-Plots for the combined values seem to be approximately $\mathcal{N}$. However, values for Pre-PASAT, VAS-Non-Light Break have to be handled carefully. And it has to be considered if VAS-Scores should be treated as ordinal data.
+
+```{r Histogram VAS-pre-PASAT, echo=FALSE}
+# Make Plot --------------------------------------------------------------------
+ggplot(data, aes(x = VAS_pre_PASAT, fill = version)) + 
+  # Make Histogram
+  geom_histogram(binwidth = 1, position = 'dodge') +
+  # Scale Axis
+  scale_y_continuous(breaks = seq(0, 18, by = 2), limits = c(0, 18)) +
+  # Customize Plot
+  labs(title = 'Histogram of Stress Pre-PASAT',
+       x = 'Stress Pre-PASAT',
+       y = 'Number of Particiapnts',
+       fill = 'Version')
+```
+
+It seems that the distribution really is $non-\mathcal{N}$. A Goodness of Fit Test should reveal more insights.
+
+```{r, echo=FALSE}
+# Goodness of Fit Test for Stress Pre PASAT
+print('Goodness of Fit Test for Stress Pre-PASAT')
+descdist(data$VAS_pre_PASAT, discrete = TRUE)
+```
+
+The Cullen and Frey Graph indicates that the current distribution is either Poisson or $\mathcal{N}$. Additional considerations with a strategy for handling this variable has to be done.
+
+```{r, echo=FALSE}
+# Make Plot --------------------------------------------------------------------
+ggplot(data, aes(x = VAS3_nl, fill = version)) + 
+  # Make Histogram
+  geom_histogram(binwidth = 1, position = 'dodge') +
+  # Scale Axis
+  scale_y_continuous(breaks = seq(0, 18, by = 2), limits = c(0, 18)) +
+  # Customize Plot
+  labs(title = 'Histogram of Stress Non-Light Break',
+       x = 'Stress Non-Light Break',
+       y = 'Number of Participants',
+       fill = 'Version')
+```
+
+The distribution for the subjective stress after the light break looks a bit different such that Poisson-Distribution is more likely than $\mathcal{N}$. Considerations about transformation have to be made.
+
+```{r, echo=FALSE}
+# Goodness of Fit Test for Stress Non-Light Break
+print('Goodness of Fit Test for Stress Non-Light Break')
+descdist(data$VAS3_nl, discrete = TRUE)
+```
+
+### Inference Analysis
+
+#### CPT
+
+```{r box plot VAS at CPT, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Reshape Data for Plotting
+data_long <- gather(data[c('ID',
+                           'sex',
+                           'version',
+                           'VAS_pre_CPT', 
+                           'VAS_pos_CPT', 
+                           'VAS_bre_CPT')], time, value, -ID, -sex, -version) %>%
+             mutate(condition = ifelse(version == 1, 'Light', 'Still Sitting'))
+
+# Factorize Sex
+data_long$sex = factor(data_long$sex, labels = c('Male', 'Female'))
+
+# Change Levels
+levels(data_long$version) <- c('Light', 'Still Sitting')
+
+# Define the custom order of variables
+custom_order <- c('VAS_pre_CPT', 'VAS_pos_CPT', 'VAS_bre_CPT')
+
+# Make Plot --------------------------------------------------------------------
+ggplot(data_long, aes(x = factor(time, levels = custom_order),
+                      y = value, 
+                      fill = interaction(condition, sex))) +
+  # Make Boxplot
+  geom_boxplot() +
+  # Add Mean Indicator
+  stat_summary(fun = mean, geom = 'point',
+               shape = 18, size = 3, color = 'black',
+               position = position_dodge(width = 0.75),
+               show.legend = FALSE) +
+  # Rename Time Variables
+  scale_x_discrete(labels = c('VAS_pre_CPT' = 'Pre',
+                              'VAS_pos_CPT' = 'Post',
+                              'VAS_bre_CPT' = 'Break')) +
+  # Customize Plot
+  labs(x = 'Time',
+       y = 'Subjective Stress',
+       title = 'Subjective Stress CPT by Condition and Sex') +
+  scale_fill_discrete(name = 'Condition')
+```
+
+It can be seen, that after the CPT there are more low stress scores and this trend continues until after the break. However, this has to be assessed with inferential statistics. There seems to be an interaction with sex as there are more high values for stress in females. The means are:
+
+```{r mean VAS CPT1, echo = FALSE}
+data_long$time <- factor(data_long$time, 
+                         levels = c('VAS_pre_CPT',
+                                    'VAS_pos_CPT',
+                                    'VAS_bre_CPT'))
+aggregate(value ~ time + condition, data = data_long, FUN = mean)
+```
+
+##### Line Plot
+
+```{r lineplot CPT ungrouped, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Get Data
+data_stress <- read.csv(paste0(getwd(),'/data/questionnaire/final.csv'))
+
+# Reshape Data
+VAS_CPT <- data_stress %>%
+  group_by(version) %>%
+  summarise(Pre_mean = mean(VAS1_1),
+            Post_mean = mean(VAS2_1),
+            Break_mean = mean(VAS3_1),
+            Pre_sd = sd(VAS1_1),
+            Post_sd = sd(VAS2_1),
+            Break_sd = sd(VAS3_1)) %>%
+  ungroup() %>%
+  pivot_longer(cols = contains(c('mean','sd')),
+               names_to = c('time', '.value'),
+               names_pattern = '(.*)_(.*)',
+               values_to = c('stress_mean', 'sd')) %>%
+  mutate(version = factor(version, labels = c('Light', 'Non-Light'))) %>%
+  mutate(time = factor(time, levels = c('Pre', 'Post', 'Break')))
+
+# Make Plot --------------------------------------------------------------------------
+ggplot(data = VAS_CPT, aes(x = time,
+                           y = mean,
+                           group = version,
+                           colour = version,
+                           shape = version)) +
+  # Make Lineplot
+  geom_line(linewidth = 1.1) + 
+  # Add Points
+  geom_point(size = 2) +
+  # Add Errorbars
+  geom_errorbar(aes(ymin = mean - sd, ymax = mean + sd), width = 0.2) +
+  # Customize Plot
+  scale_colour_manual(values = c('Light' = 'cadetblue', 'Non-Light' = 'darkred')) +
+  labs(x = 'Time', 
+       y = 'Stress',
+       title = 'Stress by Time - CPT',
+       fill = 'Version') +
+  ylim(0,4.5)
+```
+
+It can be seen, that stress decreased immediately after the CPT and the decrease was even steeper till the end of the break. It does not seem, that there is an effect of version on subjective stress perception, particularly as the error bars are highly overlapping. Therefore, the light break did not decrease the stress stronger than doing nothing. However, this has to be assessed with inferential statistics. The means are:
+
+```{r mean VAS CPT, echo = FALSE}
+# Print Means for each Time
+aggregate(mean ~ time + version, data = VAS_CPT, FUN = mean)
+```
+
+It can be seen, that stress decreased immediately after the CPT and the decrease was even steeper till the end of the break. It does not seem, that there is an effect of condition on subjective stress perception, hence the light break did not decrease the stress stronger than doing nothing.
+
+```{r lineplot CPT grouped, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Get Data
+data_stress <- read.csv(paste0(getwd(),'/data/questionnaire/final.csv'))
+
+# Reshape Data
+VAS_CPT <- data_stress %>%
+  group_by(version, sex) %>%
+  summarise(
+    Pre_mean = mean(VAS1_1, na.rm = TRUE),
+    Post_mean = mean(VAS2_1, na.rm = TRUE),
+    Break_mean = mean(VAS3_1, na.rm = TRUE),
+    Pre_sd = sd(VAS1_1, na.rm = TRUE),
+    Post_sd = sd(VAS2_1, na.rm = TRUE),
+    Break_sd = sd(VAS3_1, na.rm = TRUE),
+    .groups = 'drop'
+  ) %>%
+  ungroup() %>%
+  pivot_longer(
+    cols = contains(c('mean', 'sd')),
+    names_to = c('time', '.value'),
+    names_pattern = '(.*)_(.*)'
+  ) %>%
+  mutate(version = factor(version, labels = c('Light', 'Non-Light')),
+         sex = factor(sex, labels = c('Male', 'Female')), # Adjust as per your dataset
+         time = factor(time, levels = c('Pre', 'Post', 'Break'))
+  )
+
+# Prepare Colors
+palette <- brewer.pal(11,'Paired')
+
+# Accessing specific colors
+color1 <- palette[1]
+color2 <- palette[2]
+color3 <- palette[7]
+color4 <- palette[8]
+
+# Make Plot --------------------------------------------------------------------------
+ggplot(data = VAS_CPT, aes(x = time,
+                           y = mean,
+                           group = interaction(version, sex),
+                           colour = interaction(version, sex),
+                           shape = interaction(version, sex))) +
+  # Make Lineplot
+  geom_line(linewidth = 1.1) + 
+  # Add Points
+  geom_point(size = 2) +
+  # Add Errorbars
+  geom_errorbar(aes(ymin = mean - sd, ymax = mean + sd), width = 0.2) +
+  # Customize Plot Colors
+  scale_colour_manual(values = c('Light.Male' = color1, 
+                                 'Non-Light.Male' = color2,
+                                 'Light.Female' = color3, 
+                                 'Non-Light.Female' = color4)) +
+  # Customize Plot points
+  scale_shape_manual(values = c('Light.Male' = 16, 
+                                'Non-Light.Male' = 17,
+                                'Light.Female' = 16, 
+                                'Non-Light.Female' = 17)) +
+  # Plot Labels and Titles
+  labs(x = 'Time', 
+       y = 'Stress',
+       title = 'Stress by Time and Sex - CPT',
+       colour = 'Group',
+       shape = 'Group') + 
+  # Set Y-axis limits
+  ylim(0, 4.5) + 
+  # Change legend position
+  theme(legend.position = 'bottom')
+```
+
+It can be seen that there is a difference between sexes in overall subjective stress. Furthermore there might be a difference between the versions for female participants but not for male participants. The decrease from Post to Break does not seem to differ between groups. The respective means are:
+
+```{r mean VAS CPT grouped, echo = FALSE}
+# Print Means for each Time
+aggregate(mean ~ time + version + sex, data = VAS_CPT, FUN = mean)
+```
+
+##### Linear Model
+
+There is a problem of treating the data as ordinal because the Friedman-Test cannot assess possible interactions. Therefore, a Linear-Mixed-Model will be fitted to see if there is an effect of version and or sex.
+
+```{r linear mixed model subjective stress CPT, echo=FALSE}
+# Preparation ------------------------------------------------------------------
+# Factor time variable
+data_long$time <- factor(data_long$time,
+                         levels = c('VAS_pre_CPT',
+                                    'VAS_pos_CPT',
+                                    'VAS_bre_CPT'))
+
+# Fit Model---------------------------------------------------------------------
+# Model
+model <- lmer(value ~ sex + time + (1 | ID), data = data_long)
+
+# Assess Results----------------------------------------------------------------
+# Print Results
+rsq.lmm(model)
+summary(model)
+
+# Add Diagnostics---------------------------------------------------------------
+# Check for multicollinearity
+vif(model)
+# Plot Diagnostics
+gglm(model)
+```
+
+The Linear Model also reveals that there is a significant decrease of stress between Pre/Break and that Females tend to perceive higher stress values. Now the difference between Post and Break, incorporating Version and Sex has to be assessed.
+
+```{r linear mixed model subjective stress CPT post/break, echo=FALSE}
+# Preparation ------------------------------------------------------------------
+# Subset DataFrame
+data_subset <- data_long[data_long$time != 'VAS_pre_CPT',]
+
+# Fit Model---------------------------------------------------------------------
+# Model
+model <- lmer(value ~ version * time + sex + (1 | ID), data = data_subset)
+
+# Assess Results----------------------------------------------------------------
+# Print Results
+rsq.lmm(model)
+summary(model)
+
+# Add Diagnostics---------------------------------------------------------------
+# Check for multicollinearity
+vif(model)
+# Plot Diagnostics
+gglm(model)
+```
+
+The model reveals, that there is a main effect, that females perceive higher stress and a main effect of time, that perceived stress is reduced between CPT and break. There is no effect on version and the interaction betwween version and time such that it can be concluded, that the light condition did not have any effect on subjective stress.
+
+#### PASAT
+
+Here is the pattern for the PASAT:
+
+```{r box plot VAS at PASAT, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Reshape Data for Plotting
+data_long <- gather(data[c('ID',
+                           'sex',
+                           'version',
+                           'VAS_pre_PASAT', 
+                           'VAS_pos_PASAT', 
+                           'VAS_bre_PASAT')], time, value, -ID, -sex, -version) %>%
+             mutate(condition = ifelse(version == 1, 'Still Sitting', 'Light'))
+
+# Factorize Sex
+data_long$sex = factor(data_long$sex, labels = c('Male', 'Female'))
+
+# Change Levels
+levels(data_long$version) <- c('Still Sitting', 'Light')
+
+# Define the custom order of variables
+custom_order <- c('VAS_pre_PASAT', 'VAS_pos_PASAT', 'VAS_bre_PASAT')
+
+# Make Plot --------------------------------------------------------------------
+ggplot(data_long, aes(x = factor(time, levels = custom_order),
+                      y = value, 
+                      fill = interaction(condition, sex))) +
+  # Make Boxplot
+  geom_boxplot() +
+  # Add Mean Indicator
+  stat_summary(fun = mean, geom = 'point',
+               shape = 18, size = 3, color = 'black',
+               position = position_dodge(width = 0.75),
+               show.legend = FALSE) +
+  # Rename Time Variables
+  scale_x_discrete(labels = c('VAS_pre_PASAT' = 'Pre',
+                              'VAS_pos_PASAT' = 'Post',
+                              'VAS_bre_PASAT' = 'Break')) +
+  # Customize Plot
+  labs(x = 'Time',
+       y = 'Subjective Stress',
+       title = 'Subjective Stress PASAT by Condition and Sex') +
+  scale_fill_discrete(name = 'Condition')
+```
+
+The PASAT seem to be successful in increasing the stress directly after the test and for a longer period until the end of the break. Similarly to the pattern in the CPT there are more low values for the Still-Sitting Condition after the break which is surprising. Here the same pattern as in the CPT, that female participants tend to show more high stress values can be observed. However this has to be evaluated by an inference analysis with a Friedman Test followed by Post Hoc Tests (Wilcoxon). Still first the means are displayed.
+
+```{r mean VAS PASAT1, echo = FALSE}
+data_long$time <- factor(data_long$time, 
+                         levels = c('VAS_pre_PASAT',
+                                    'VAS_pos_PASAT',
+                                    'VAS_bre_PASAT'))
+aggregate(value ~ time + condition, data = data_long, FUN = mean)
+```
+
+##### Line Plot
+
+```{r lineplot PASAT ungrouped, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Reshape Data
+VAS_PASAT <- data_stress %>%
+  group_by(version) %>%
+  summarise(Pre_mean = mean(VAS4_1),
+            Post_mean = mean(VAS5_1),
+            Break_mean = mean(VAS6_1),
+            Pre_sd = sd(VAS4_1),
+            Post_sd = sd(VAS5_1),
+            Break_sd = sd(VAS6_1)) %>%
+  ungroup() %>%
+  pivot_longer(cols = contains(c('mean','sd')),
+               names_to = c('time', '.value'),
+               names_pattern = '(.*)_(.*)',
+               values_to = c('stress_mean', 'sd')) %>%
+  mutate(version = factor(version, labels = c('Non-Light', 'Light'))) %>%
+  mutate(time = factor(time, levels = c('Pre', 'Post', 'Break')))
+
+# Make Plot --------------------------------------------------------------------------
+ggplot(data = VAS_PASAT, aes(x = time,
+                             y = mean,
+                             group = version,
+                             colour = version,
+                             shape = version)) +
+  # Add Lineplot
+  geom_line(linewidth = 1.1) +
+  # Add Points
+  geom_point(size = 2) +
+  # Add Errorbar
+  geom_errorbar(aes(ymin = mean - sd, ymax = mean + sd), width = 0.2) +
+  # Customize Plot
+  scale_colour_manual(values = c('Light' = 'cadetblue', 'Non-Light' = 'darkred')) +
+  labs(x = 'Period', y = 'Stress', title = 'Stress by Time - PASAT') +
+  ylim(0,4.5)
+```
+
+With respect to the differences in condition, the same pattern can be observed for the PASAT. But like indicated by the the Box-Plot and Line-Plot for the CPT, the PASAT was successful in inducing stress beyond the test itself. The break was for both conditions successful in reducing the stress. The means are:
+
+```{r mean VAS PASAT, echo = FALSE}
+# Print Means for each Time
+aggregate(mean ~ time + version, data = VAS_PASAT, FUN = mean)
+```
+
+```{r lineplot PASAT grouped, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Get Data
+data_stress <- read.csv(paste0(getwd(),'/data/questionnaire/final.csv'))
+
+# Reshape Data
+VAS_PASAT <- data_stress %>%
+  group_by(version, sex) %>%
+  summarise(
+    Pre_mean = mean(VAS4_1, na.rm = TRUE),
+    Post_mean = mean(VAS5_1, na.rm = TRUE),
+    Break_mean = mean(VAS6_1, na.rm = TRUE),
+    Pre_sd = sd(VAS2_1, na.rm = TRUE),
+    Post_sd = sd(VAS3_1, na.rm = TRUE),
+    Break_sd = sd(VAS4_1, na.rm = TRUE),
+    .groups = 'drop'
+  ) %>%
+  ungroup() %>%
+  pivot_longer(
+    cols = contains(c('mean', 'sd')),
+    names_to = c('time', '.value'),
+    names_pattern = '(.*)_(.*)'
+  ) %>%
+  mutate(version = factor(version, labels = c('Non-Light', 'Light')),
+         sex = factor(sex, labels = c('Male', 'Female')), # Adjust as per your dataset
+         time = factor(time, levels = c('Pre', 'Post', 'Break'))
+  )
+
+# Prepare Colors
+palette <- brewer.pal(11,'Paired')
+
+# Accessing specific colors
+color1 <- palette[1]
+color2 <- palette[2]
+color3 <- palette[7]
+color4 <- palette[8]
+
+# Make Plot --------------------------------------------------------------------------
+ggplot(data = VAS_PASAT, aes(x = time,
+                             y = mean,
+                             group = interaction(version, sex),
+                             colour = interaction(version, sex),
+                             shape = interaction(version, sex))) +
+  # Make Lineplot
+  geom_line(linewidth = 1.1) + 
+  # Add Points
+  geom_point(size = 2) +
+  # Add Errorbars
+  geom_errorbar(aes(ymin = mean - sd, ymax = mean + sd), width = 0.2) +
+  # Customize Plot Colors
+  scale_colour_manual(values = c('Light.Male' = color1, 
+                                 'Non-Light.Male' = color2,
+                                 'Light.Female' = color3, 
+                                 'Non-Light.Female' = color4)) +
+  # Customize Plot points
+  scale_shape_manual(values = c('Light.Male' = 16, 
+                                'Non-Light.Male' = 17,
+                                'Light.Female' = 16, 
+                                'Non-Light.Female' = 17)) +
+  # Plot Labels and Titles
+  labs(x = 'Time', 
+       y = 'Stress',
+       title = 'Stress by Time and Sex - PASAT',
+       colour = 'Group',
+       shape = 'Group') + 
+  # Set Y-axis limits
+  ylim(0, 4.5) + 
+  # Change legend position
+  theme(legend.position = 'bottom')
+```
+
+Again female participants showed higher stress values but the the differences within the groups seem to be equal. Only the change in stress from post to break in males seems to be shallower than for the other groups.
+
+##### Linear Model
+
+There is a problem of treating the data as ordinal because the Friedman-Test cannot assess possible interactions. Therefore, a Linear-Mixed-Model will be fitted to see if there is an effect of version and or sex.
+
+```{r linear mixed model subjective stress PASAT post/break, echo=FALSE}
+# Preparation ------------------------------------------------------------------
+# Factor time variable
+data_long$time <- factor(data_long$time,
+                         levels = c('VAS_pre_PASAT',
+                                    'VAS_pos_PASAT',
+                                    'VAS_bre_PASAT'))
+
+# Fit Model---------------------------------------------------------------------
+# Model
+model <- lmer(value ~ sex + time + (1 | ID), data = data_long)
+
+# Assess Results----------------------------------------------------------------
+# Print Results
+rsq.lmm(model)
+summary(model)
+
+# Add Diagnostics---------------------------------------------------------------
+# Check for multicollinearity
+vif(model)
+# Plot Diagnostics
+gglm(model)
+```
+
+All predictors in the linear model became significant. Therefore it can be concluded, that women experienced higher stress levels then men in PASAT. Furthermore subjective stress increased significantly directly after stress induction. Stress levels were even higher after the break, however the break was able to reduce stress levels.
+
+```{r linear mixed model subjective stress PASAT, echo=FALSE}
+# Preparation ------------------------------------------------------------------
+# Subset DataFrame
+data_subset <- data_long[data_long$time != 'VAS_pre_PASAT',]
+
+# Fit Model---------------------------------------------------------------------
+# Model
+model <- lmer(value ~ version * time + sex + (1 | ID), data = data_subset)
+
+# Assess Results----------------------------------------------------------------
+# Print Results
+rsq.lmm(model)
+summary(model)
+
+# Add Diagnostics---------------------------------------------------------------
+# Check for multicollinearity
+vif(model)
+# Plot Diagnostics
+gglm(model)
+```
+
+This linear model reveals, that there is no effect of version in the decrease between end of stress induction and the end of the break. Furthermore there is no effect of version on perceived stress neither as a main effect nor as an interaction. This leads to the conclusion, that the light intervention was not successful for perceived stress. Again, female participants perceived higher stress.
+
+### Effect of Ice Bathing on CPT Stress
+
+```{r, echo = FALSE}
+# Preparation ------------------------------------------------------------------
+# Define Data
+data_long <- gather(data[c('Eisbaden',
+                           'VAS_pre_CPT', 
+                           'VAS_pos_CPT')], variable, value, -Eisbaden)
+
+# Factorize Ice-Bathing variables
+data_long$Eisbaden <- factor(data_long$Eisbaden, 
+                             levels = c(0,1), 
+                             labels = c('No', 'Yes'))
+
+# Define the custom order of variables
+custom_order <- c('VAS_pre_CPT', 'VAS_pos_CPT')
+
+# Make Plot -------------------------------------------------------------------
+ggplot(data_long, aes(x = factor(variable, levels = custom_order),
+                      y = value,
+                      fill = Eisbaden)) +
+  # Make Boxplot
+  geom_boxplot() +
+  # Add Mean Indicator
+  stat_summary(fun = mean, geom = 'point', 
+               shape = 18, size = 3, color = 'black', 
+               position = position_dodge(width = 0.75),
+               show.legend = FALSE) +
+  # Scale Axis
+  scale_x_discrete(labels = c('VAS_pre_CPT' = 'Pre-CPT',
+                              'VAS_pos_CPT' = 'Post-CPT')) +
+  # Customize Plot
+  labs(x = 'Time',
+       y = 'Stress',
+       title = 'Stress of CPT by Experience in Ice Bathing')
+```
+
+It does not seem that there would be a difference in stress pre CPT and post CPT. This could be confirmed by two Wilcoxon-Tests.
+
+```{r Wilcoxon Test for CPT, echo=FALSE}
+# Conduct two Wilcoxon tests to see if experience with Ice Bathing influences 
+# the subjective stress in CPT
+# Pre CPT ----------------------------------------------------------------------
+# Indicate Variable
+print('Wilcoxon Test for Pre CPT')
+# Wilcoxon Test
+wilcox.test(VAS_pre_CPT~Eisbaden, data = data, 
+            exact = FALSE, 
+            correct = FALSE, 
+            conf.int = FALSE)
+
+# Post CPT ---------------------------------------------------------------------
+# Indicate Variable
+print('Wilcoxon Test for Post CPT')
+# Wilcoxon Test
+wilcox.test(VAS_pos_CPT~Eisbaden, data = data, 
+            exact = FALSE, 
+            correct = FALSE, 
+            conf.int = FALSE)
+```
+
+The Wilcoxon Tests did not become significant. Therefore it can be concluded, that experience with ice bathing does not change the stress-perception after the CPT.
+
+```{r Clean Environment 1, echo=FALSE}
+# Clean Environment
+rm(list = ls()[!ls() %in% c('data', 'data_long', 'sdRplot')])
+```
+
+## Semantic Differentials Study Part I
+
+### UEQ-S
+
+The User Experience Questionnaire is a semantic differential, asking about the characteristics of the relaxation period
+
+```{r sdRplot UEQ-S Version, echo=FALSE}
+# Preparation ------------------------------------------------------------------
+# Get Relevant Column Names
+ueqs_columns <- grep('^UEQS', names(data), value = TRUE)
+
+# Set Up Labeling
+high      <- c('einfach','effizient','interessant')
+low       <- c('kompliziert','ineffizient','uninteressant')
+scale     <- c('3', '2', '1', '0', '1', '2', '3')
+
+# Set Up Means
+col_cpt   <- grep('^UEQS_cpt*', ueqs_columns, value = TRUE)
+col_pasat <- grep('^UEQS_PASAT*', ueqs_columns, value = TRUE)
+
+data_ver1  <- data[data$version == 1, ueqs_columns]
+data_ver2  <- data[data$version == 2, ueqs_columns]
+
+# Calculate Means --------------------------------------------------------------
+# CPT
+# Light
+grp1means <- colMeans(data_ver1[col_cpt])
+# Non-Light
+grp2means <- colMeans(data_ver2[col_cpt])
+
+# PASAT
+# Light
+grp3means <- colMeans(data_ver2[col_pasat])
+# Non-Light
+grp4means <- colMeans(data_ver1[col_pasat])
+
+# Create Matrix
+diff_data <- matrix(
+  cbind(low,high,grp1means,grp2means,grp3means,grp4means),
+  nrow=3,ncol=6,byrow=FALSE,
+  dimnames=list(c('I1','I2','I3'),
+                c('Low','High',
+                  'CPT Light','CPT Non-Light',
+                  'PASAT Light','PASAT Non-Light'))
+  )
+
+# Make Plot --------------------------------------------------------------------
+sdRplot(7, scale, 
+        3, diff_data,
+        main = 'Semantic Differential UEQ-S')
+
+```
+
+It can be seen that for both tests there are similar patterns. The light intervention was seen as more complicated than still-sitting but it was also more efficient and interesting than the still-sitting break. At sight it seems likethe effects were stronger for the PASAT then for the CPT as the differences are greater.
+
+#### Inference Analysis
+
+##### Test on $\mathcal{N}$
+
+###### CPT
+
+```{r normality test on UEQS CPT, echo=FALSE}
+# Preparation ------------------------------------------------------------------
+# Get names of UEQS-columns
+rel_col  <- grep('^UEQS_cpt*', names(data), value = TRUE)
+
+# Normality Tests --------------------------------------------------------------
+# SW-Tests
+for (con in c('light', 'still-sitting')) {
+  # Subset data
+  if (con == 'light') {
+    ver <- 1
+  } else {
+    ver <- 2
+  }
+  
+  data_sub <- data[data$version == ver, rel_col]
+  
+  # SW Test
+  for (var in rel_col) {
+    print(paste0('SW-Test for ',var,' in', con,'-condition'))
+    print(shapiro.test(data_sub[,var]))
+  }
+}
+
+# Make Plots -------------------------------------------------------------------
+# Define layout with two plots side by side
+par(mfrow = c(2, 3))
+  
+# Set Fontsize
+cex_value <- 0.5
+
+# QQ-Plot 1
+PlotQQ(data[data$version == '1', rel_col[1]], 
+       main = 'QQ-Plot UEQS 1 - Light',
+       cex = cex_value)
+# QQ-Plot 2
+PlotQQ(data[data$version == '1', rel_col[2]], 
+       main = 'QQ-Plot UEQS 2 - Light',
+       cex = cex_value)
+# QQ-Plot 3
+PlotQQ(data[data$version == '1', rel_col[3]], 
+       main = 'QQ-Plot UEQS 3 - Light',
+       cex = cex_value)
+# QQ-Plot 4
+PlotQQ(data[data$version == '2', rel_col[1]], 
+       main = 'QQ-Plot UEQS 1 - Still-Sitting',
+       cex = cex_value)
+# QQ-Plot 5
+PlotQQ(data[data$version == '2', rel_col[2]], 
+       main = 'QQ-Plot UEQS 2 - Still-Sitting',
+       cex = cex_value)
+# QQ-Plot 6
+PlotQQ(data[data$version == '2', rel_col[3]], 
+       main = 'QQ-Plot UEQS 3 - Still-Sitting',
+       cex = cex_value)
+  
+# Reset the layout
+par(mfrow = c(1, 1))
+```
+
+The data seems to be $non-\mathcal{N}$ so that the following analysis has to be conducted with non-parametric tests.
+
+```{r MWU-CPT-UEQS, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Subset Data
+cpt_ueqs         <- data[,c('version',rel_col)]
+
+# Factor Version
+cpt_ueqs$version <- factor(cpt_ueqs$version, 
+                           levels = c(1, 2),
+                           labels = c('Light', 'Still-Sitting'))
+
+# Variable Names
+var_names <- c('kompliziert/einfach', 
+               'ineffizient/effizient',
+               'uninteressant/interessant')
+
+# Inference Test ---------------------------------------------------------------
+# Loop through each variable
+for (i in 1:length(rel_col)) {
+  # Indicate which variable to test
+  print(paste0('Wilcoxon Test on the difference in the variable: ',
+               var_names[i], ' between light and still-sitting break.'))
+  
+  # Wilcoxon test
+  wilcox <- wilcox.test(cpt_ueqs[,rel_col[i]]~cpt_ueqs[,'version'],
+                        exact = FALSE,
+                        correct = FALSE,
+                        conf.int = TRUE)
+  # Print results
+  print(wilcox)
+}
+
+print('WARNING!!!: Check if bonferroni correction is relevant')
+```
+
+The Wilcox tests revealed that there is only a significant difference between the versions for the last variable which asks, if the relaxation period is interesting. People in the light condition exhibited higher values for this variable such that light was more interesting than still sitting.
+
+###### PASAT
+
+```{r normality test on UEQS PASAT, echo=FALSE}
+# Preparation ------------------------------------------------------------------
+# Get names of UEQS-columns
+rel_col  <- grep('^UEQS_PASAT*', names(data), value = TRUE)
+
+# Normality Tests --------------------------------------------------------------
+# SW-Tests
+for (con in c('light', 'still-sitting')) {
+  # Subset data
+  if (con == 'light') {
+    ver <- 1
+  } else {
+    ver <- 2
+  }
+  
+  data_sub <- data[data$version == ver, rel_col]
+  
+  # SW Test
+  for (var in rel_col) {
+    print(paste0('SW-Test for ',var,' in', con,'-condition'))
+    print(shapiro.test(data_sub[,var]))
+  }
+}
+
+# Make Plots -------------------------------------------------------------------
+# Define layout with two plots side by side
+par(mfrow = c(2, 3))
+  
+# Set Fontsize
+cex_value <- 0.5
+
+# QQ-Plot 1
+PlotQQ(data[data$version == '1', rel_col[1]], 
+       main = 'QQ-Plot UEQS 1 - Light',
+       cex = cex_value)
+# QQ-Plot 2
+PlotQQ(data[data$version == '1', rel_col[2]], 
+       main = 'QQ-Plot UEQS 2 - Light',
+       cex = cex_value)
+# QQ-Plot 3
+PlotQQ(data[data$version == '1', rel_col[3]], 
+       main = 'QQ-Plot UEQS 3 - Light',
+       cex = cex_value)
+# QQ-Plot 4
+PlotQQ(data[data$version == '2', rel_col[1]], 
+       main = 'QQ-Plot UEQS 1 - Still-Sitting',
+       cex = cex_value)
+# QQ-Plot 5
+PlotQQ(data[data$version == '2', rel_col[2]], 
+       main = 'QQ-Plot UEQS 2 - Still-Sitting',
+       cex = cex_value)
+# QQ-Plot 6
+PlotQQ(data[data$version == '2', rel_col[3]], 
+       main = 'QQ-Plot UEQS 3 - Still-Sitting',
+       cex = cex_value)
+  
+# Reset the layout
+par(mfrow = c(1, 1))
+```
+
+The data seems to be $non-\mathcal{N}$ so that the following analysis has to be conducted with non-parametric tests.
+
+```{r MWU-PASAT-UEQS, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Subset Data
+pasat_ueqs         <- data[,c('ID','version',rel_col)]
+
+# Factor Version
+pasat_ueqs$version <- factor(pasat_ueqs$version,
+                             levels = c(2, 1),
+                             labels = c('Light', 'Still-Sitting'))
+
+# Variable Names
+var_names <- c('kompliziert/einfach', 
+               'ineffizient/effizient',
+               'uninteressant/interessant')
+
+# Inference Test ---------------------------------------------------------------
+# Loop through each variable
+for (i in 1:length(rel_col)) {
+  # Indicate which variable to test
+  print(paste0('Wilcoxon Test on the difference in the variable: ',
+               var_names[i], '\n between light and still-sitting break.'))
+  
+  # Wilcoxon test
+  wilcox <- wilcox.test(pasat_ueqs[,rel_col[i]]~pasat_ueqs[,'version'],
+                        exact = FALSE,
+                        correct = FALSE,
+                        conf.int = TRUE)
+  # Print results
+  print(wilcox)
+}
+
+print('WARNING!!!: Check if bonferroni correction is relevant')
+
+```
+
+Here all three differences are statistical significant. This means, that participants in the light condition experienced their break as more complicated, more efficient and more interesting than the participants in the still-sitting condition. Compared to the results from the CPT it can be concluded, that the effects probably grow and yield significance when the stress induction leads to heightened stress perception.
+
+### KAB
+
+The KAB is a semantic differential asking about the actual feeling with respect to tense or relaxation. It will be plotted for each group and each condition (light/non-light)
+
+```{r sdRplot Study Part I Version, echo=FALSE}
+# Preparation ------------------------------------------------------------------
+# Get Relevant Column Names
+kab_columns      <- grep('^KAB*', names(data), value = TRUE)
+
+# Set Up Labeling
+high      <- c('gelassen','gelöst','unbekümmert','entspannt','vertrauensvoll','behaglich')
+low       <- c('angespannt','beklommen','besorgt','unruhig','skeptisch','unwohl')
+scale     <- c('sehr', 'ziemlich', 'eher', 'eher', 'ziemlich', 'sehr')
+
+# Set Up Means
+col_cpt   <- grep('^KAB_cpt*', kab_columns, value = TRUE)
+col_pasat <- grep('^KAB_PASAT*', kab_columns, value = TRUE)
+
+data_ver1  <- data[data$version == 1, kab_columns]
+data_ver2  <- data[data$version == 2, kab_columns]
+
+# Calculate Means --------------------------------------------------------------
+# CPT
+# Light
+grp1means <- colMeans(data_ver1[col_cpt])
+# Non-Light
+grp2means <- colMeans(data_ver2[col_cpt])
+
+# PASAT
+# Light
+grp3means <- colMeans(data_ver2[col_pasat])
+# Non-Light
+grp4means <- colMeans(data_ver1[col_pasat])
+
+# Create Matrix
+diff_data <- matrix(
+  cbind(low,high,grp1means,grp2means,grp3means,grp4means),
+  nrow=6,ncol=6,byrow=FALSE,
+  dimnames=list(c('I1','I2','I3','I4','I5','I6'),
+                c('Low','High',
+                  'CPT Light','CPT Non-Light',
+                  'PASAT Light','PASAT Non-Light'))
+  )
+
+# Make Plot --------------------------------------------------------------------
+sdRplot(6, scale, 
+        6, diff_data,
+        main = 'Semantic Differential KAB Study Part I')
+ 
+```
+
+We can see here, that in CPT there is almost no difference to detect between the conditions (light/still-sitting). Furthermore it seems, that except for the item *angespannt/gelassen* the values in the still-sitting condition tend to be higher and therefore the mood tend to be better. For the PASAT a different picture can be drawn. Here every item has higher/better values for the light condition. Those differences will be tested on significance. 
+
+#### Inference Analysis
+
+##### Test on $\mathcal{N}$
+
+###### CPT
+
+```{r normality test on KAB CPT, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Get relevant column names
+rel_col  <- grep('^KAB_cpt*', names(data), value = TRUE)
+
+# Subset data
+for (con in c('light', 'still-sitting')) {
+  # Decide on condition
+  if (con == 'light') {
+    ver <- 1
+  } else {
+    ver <- 2
+  }
+  
+  # store subset data
+  data_sub <- data[data$version == ver, rel_col]
+  
+  # SW Test
+  for (var in rel_col) {
+    print(paste0('SW-Test for ',var,' in', con,'-condition'))
+    print(shapiro.test(data_sub[,var]))
+  }
+
+  # Make Plot ------------------------------------------------------------------
+  # Define layout with two plots side by side
+  par(mfrow = c(2, 3))
+  
+  # Define fontsize
+  cex_value <- 0.5
+  
+  # QQ-Plot 1
+  PlotQQ(data_sub[,1], main = paste('QQ-Plot for KAB 1 -',con), cex = cex_value)
+  # QQ-Plot 2
+  PlotQQ(data_sub[,2], main = paste('QQ-Plot for KAB 2 -',con), cex = cex_value)
+  # QQ-Plot 3
+  PlotQQ(data_sub[,3], main = paste('QQ-Plot for KAB 3 -',con), cex = cex_value)
+  # QQ-Plot 4
+  PlotQQ(data_sub[,4], main = paste('QQ-Plot for KAB 4 -',con), cex = cex_value)
+  # QQ-Plot 5
+  PlotQQ(data_sub[,5], main = paste('QQ-Plot for KAB 5 -',con), cex = cex_value)
+  # QQ-Plot 6
+  PlotQQ(data_sub[,6], main = paste('QQ-Plot for KAB 6 -',con), cex = cex_value)
+  
+  # Reset the layout
+  par(mfrow = c(1, 1))
+}
+```
+
+The data seems to be $non-\mathcal{N}$ so that the following analysis has to be conducted with non-parametric tests.
+
+```{r MWU-CPT-KAB, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Subset Data
+cpt_kab         <- data[,c('version',rel_col)]
+
+# Factor Version
+cpt_kab$version <- factor(cpt_kab$version,
+                          levels = c(1, 2),
+                          labels = c('Light', 'Still-Sitting'))
+
+# Variable Names
+var_names <- c('angespannt/gelassen', 
+               'beklommen/gelöst',
+               'besorgt/unbekümmert',
+               'unruhig/entspannt',
+               'skeptisch/vertrauensvoll',
+               'unwohl/behaglich')
+
+# Inference Test ---------------------------------------------------------------
+# Loop through each variable
+for (i in 1:length(rel_col)) {
+  # Indicate which variable to test
+  print(paste0('Wilcoxon Test on the difference in the variable: ',
+               var_names[i], '\n between light and still-sitting break.'))
+  
+  # Wilcoxon test
+  wilcox <- wilcox.test(cpt_kab[,rel_col[i]]~cpt_kab[,'version'],
+                        exact = FALSE,
+                        correct = FALSE,
+                        conf.int = TRUE)
+  # Print results
+  print(wilcox)
+}
+
+print('WARNING!!!: Check if bonferroni correction is relevant')
+```
+
+The Wilcox tests revealed that there is no significant difference between the versions for all KAB variables.
+
+###### PASAT
+
+```{r normality test on KAB PASAT, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Get relevant column names
+rel_col  <- grep('^KAB_PASAT*', names(data), value = TRUE)
+
+# Subset data
+for (con in c('light', 'still-sitting')) {
+  # Decide on condition
+  if (con == 'light') {
+    ver <- 1
+  } else {
+    ver <- 2
+  }
+  
+  # store subset data
+  data_sub <- data[data$version == ver, rel_col]
+  
+  # SW Test
+  for (var in rel_col) {
+    print(paste0('SW-Test for ',var,' in', con,'-condition'))
+    print(shapiro.test(data_sub[,var]))
+  }
+
+  # Make Plot ------------------------------------------------------------------
+  # Define layout with two plots side by side
+  par(mfrow = c(2, 3))
+  
+  # Define fontsize
+  cex_value <- 0.5
+  
+  # QQ-Plot 1
+  PlotQQ(data_sub[,1], main = paste('QQ-Plot for KAB 1 -',con), cex = cex_value)
+  # QQ-Plot 2
+  PlotQQ(data_sub[,2], main = paste('QQ-Plot for KAB 2 -',con), cex = cex_value)
+  # QQ-Plot 3
+  PlotQQ(data_sub[,3], main = paste('QQ-Plot for KAB 3 -',con), cex = cex_value)
+  # QQ-Plot 4
+  PlotQQ(data_sub[,4], main = paste('QQ-Plot for KAB 4 -',con), cex = cex_value)
+  # QQ-Plot 5
+  PlotQQ(data_sub[,5], main = paste('QQ-Plot for KAB 5 -',con), cex = cex_value)
+  # QQ-Plot 6
+  PlotQQ(data_sub[,6], main = paste('QQ-Plot for KAB 6 -',con), cex = cex_value)
+  
+  # Reset the layout
+  par(mfrow = c(1, 1))
+}
+```
+
+The data seems to be $non-\mathcal{N}$ so that the following analysis has to be conducted with non-parametric tests.
+
+```{r MWU-PASAT-KAB, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Subset Data
+pasat_kab         <- data[,c('ID','version',rel_col)]
+
+# Factor Version
+pasat_kab$version <- factor(pasat_kab$version,
+                            levels = c(2, 1),
+                            labels = c('Light', 'Still-Sitting'))
+
+# Variable Names
+var_names <- c('angespannt/gelassen', 
+               'beklommen/gelöst',
+               'besorgt/unbekümmert',
+               'unruhig/entspannt',
+               'skeptisch/vertrauensvoll',
+               'unwohl/behaglich')
+
+# Inference Test ---------------------------------------------------------------
+# Loop through each variable
+for (i in 1:length(rel_col)) {
+  # Indicate which variable to test
+  print(paste0('Wilcoxon Test on the difference in the variable: ',
+               var_names[i], ' between light and still-sitting break.'))
+  
+  # Wilcoxon test
+  wilcox <- wilcox.test(pasat_kab[,rel_col[i]]~pasat_kab[,'version'],
+                        exact = FALSE,
+                        correct = FALSE,
+                        conf.int = TRUE)
+  # Print results
+  print(wilcox)
+}
+
+print('WARNING!!!: Check if bonferroni correction is relevant')
+```
+
+Here all three differences are statistical significant. This means, that participants in the light condition found themselves in better mood indicated by every item. Compared to the results from the CPT it can be concluded, that the light intervention only reveals effects, when participants felt stress beforehand. 
+
+```{r Clean Environment 2, echo=FALSE}
+# CLean Environment
+rm(list = ls()[!ls() %in% c('data', 'data_long', 'sdr_plot', 'sdRplot')])
+```
+
+# Inquisit Tests
+
+## PASAT
+
+```{r PASAT Setup, echo=FALSE, include=FALSE}
+# Setup
+setwd(paste0(getwd(),'/data'))
+pasat <- read.csv(paste0(getwd(),'/inquisit/PASAT.csv'))
+```
+
+### Summary
+
+The summary is done for the Totalcorrect variable as this is the only one which is interesting for the PASAT.
+
+```{r PASAT summary, echo=FALSE}
+summary(pasat$totalcorrect)
+```
+
+The mean and median seem to differ. This will be addressed in the following paragraph concerning the normality of this variable.
+
+### Version Differences
+
+Here again, it is important to see if there are Variations in PASAT performance due to version affiliation.
+
+```{r PASAT version comparison, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Factorize Version
+pasat$version <- as.factor(pasat$version)
+
+# Reshape Data
+pasat_long <- gather(pasat[c('version','totalcorrect')], 
+                     variable, value, -version)
+
+# Make Plot --------------------------------------------------------------------
+plot <- ggplot(pasat_long, aes(x=variable, y=value, fill=version)) +
+  # Make Boxplot
+  geom_boxplot() +
+  # Add Mean Indicator
+  stat_summary(fun = mean, geom = 'point', 
+               shape = 18, size = 3, color = 'black', 
+               position = position_dodge(width = 0.75),
+               show.legend = FALSE) +
+  # Customize Plot
+  labs(x = 'Sum of Correct Answers',
+       y = 'Sum',
+       title = 'Comparison of Sum of Correct PASAT Tasks',
+       fill = 'Version')
+# Complete ---------------------------------------------------------------------
+# Show Plot
+plot
+# Store plot data
+plot_data <- ggplot_build(plot)
+```
+
+Some outliers can be identified. While outliers towards higher values could make sense, such that people are just good in mathematical calculations while the outlier towards low values could indicate a lack of compliance. The instance below 100 could be compared also in the other performance tests to see if the performance was low across all tasks. There could be a slight difference between both versions so it will be tested by a Wilcoxon Test
+
+```{r wilcoxon test totalcorrect PASAT, echo = FALSE}
+# Indicate what to test
+print('Wilcoxon Test for sum of correct answers')
+# Conduct Wilcoxon test
+wilcox.test(totalcorrect~version, data = pasat, 
+            exact = FALSE, 
+            correct = FALSE, 
+            conf.int = FALSE)
+```
+
+Even though there might be a tendency toward significance, the difference must be labelled as non-significant. Therefore the randomized groups did not vary in their ability of mathematical calculations among stress. The difference observed by the boxplot might be due to the outlier, which will be examined in more detail in one of the following paragraphs.
+
+### Test on $\mathcal{N}$
+
+The Wilcoxon Test reveals no significant difference between both versions such that randomization can be considered as successful. Next the distributions (single versions & combined) will be tested on $\mathcal{N}$ by Shapiro-Wilk Tests and QQ-Plots.
+
+```{r, echo=FALSE}
+# Test for Normality
+# SW Tests ---------------------------------------------------------------------
+# Version Indication
+print('Version 1')
+# Conduct Test
+shapiro.test(pasat$totalcorrect[pasat$version == 1])
+
+# Version Indication
+print('Version 2')
+# Conduct Test
+shapiro.test(pasat$totalcorrect[pasat$version == 2])
+
+# Version Indication
+print('Combined')
+# Conduct Test
+shapiro.test(pasat$totalcorrect)
+
+# Make QQ Plots ----------------------------------------------------------------
+
+# Define layout with two plots side by side
+par(mfrow = c(1, 3))
+
+# QQ-Plot
+PlotQQ(pasat$totalcorrect[pasat$version == 1], main = 'QQ-Plot Version 1')
+# QQ-Plot
+PlotQQ(pasat$totalcorrect[pasat$version == 2], main = 'QQ-Plot Version 2')
+# QQ-Plot
+PlotQQ(pasat$totalcorrect, main = 'QQ-Plot Combined')
+
+# Reset the layout
+par(mfrow = c(1, 1))
+```
+
+For Version 1 the SW-Test is not significant but given the outliers in the QQ-Plot and, $\mathcal{N}$ is likely to be rejected. For Version 2 evidence for $non-\mathcal{N}$ is even larger. Therefore, transformation will be required to get the correct transformation a closer look on the distribution is necessary.
+
+```{r distribution plot totalcorrect, echo = FALSE}
+# Make Plot --------------------------------------------------------------------
+ggplot(pasat, aes(x = totalcorrect, fill = version)) + 
+  # Plot Histogram
+  geom_histogram(binwidth = 25,position = 'dodge') + 
+  # Customize Plot
+  labs(x = 'Totalcorrect',
+       y = 'Number of Participants',
+       title = 'Distribution of Totalcorrect by Version',
+       fill = 'Version')
+```
+
+At first glance there is just a small deviation from $\mathcal{N}$. However, the deviation may be due to the few exceptional high values. A Goodness of Fit Test will be conducted for further insights.
+
+```{r, echo=FALSE}
+# Goodness of Fit Test for PASAT
+print('Goodness of Fit Test for PASAT-Totalcorrect; Discrete = FALSE')
+descdist(pasat$totalcorrect, discrete = FALSE)
+# Goodness of Fit Test for PASAT
+print('Goodness of Fit Test for PASAT-Totalcorrect; Discrete = TRUE')
+descdist(pasat$totalcorrect, discrete = TRUE)
+```
+
+When discrete is not assumed, data is likely to follow a lognormal distribution. To handle it properly we should use log-transformation. To test this assumption a SW-Test and Histogram are computed for the log-transformed data. However, when the data is considered to be discrete, we get indication for negative binomial distribution. This could be transformed with a box-cox transformation.
+
+#### Log-Transformation
+
+```{r SW Test log-transformed PASAT, echo=FALSE}
+# Test for Normality
+# SW Tests ---------------------------------------------------------------------
+# Version Indication
+print('Version 1')
+# Conduct Test
+shapiro.test(log(pasat$totalcorrect[pasat$version == 1]))
+
+# Version Indication
+print('Version 2')
+# Conduct Test
+shapiro.test(log(pasat$totalcorrect[pasat$version == 2]))
+
+# Version Indication
+print('Combined')
+# Conduct Test
+shapiro.test(log(pasat$totalcorrect))
+```
+
+Given the non significant SW-Tests after log-transformation it can be concluded that this method was successful. Further the histogram on the log-transformed data will be plotted.
+
+```{r Histogram log-transformed PASAT, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Add a new column with log-transformed values
+pasat$log_totalcorrect <- log(pasat$totalcorrect)
+
+# Make Plot --------------------------------------------------------------------
+ggplot(pasat, aes(x = log_totalcorrect, fill = version)) + 
+  # Plot Histogram
+  geom_histogram(binwidth = 0.08, 
+                 position = 'dodge', 
+                 na.rm=TRUE) +
+  # Customize Plot
+  labs(x = 'Log-Transformed Totalcorrect',
+       y = 'Frequency',
+       title = 'Histogram Log-Transformed Totalcorrect',
+       fill = 'Version') +
+  # Scale Axis
+  scale_x_continuous(limits = c(4.5,6.25))
+```
+
+Also the histogram proves the success of log-transformation to approximate $\mathcal{N}$.
+
+#### Box-Cox Transformation
+
+Even though the Log-Transformation was successful, a Box-Cox transformation will be conducted based on the calculated lambda. A Log-Transformation is only possible, if $\lambda = 0$. Otherwise the transformation is conducted as follows: $\frac{{\text{x}^\lambda - 1}}{\lambda}$
+
+```{r boxcox transformation PASAT, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Get new Variable
+bc <- boxcox(pasat$totalcorrect ~ 1)
+
+# Extract the optimal lambda value
+lambda <- bc$x[which.max(bc$y)]
+
+# Transform --------------------------------------------------------------------
+if (lambda == 0) {
+  pasat$bc_totalcorrect <- log(pasat$totalcorrect)
+} else {
+  pasat$bc_totalcorrect <- (pasat$totalcorrect^lambda - 1) / lambda
+}
+
+# Test -------------------------------------------------------------------------
+# Example: Shapiro-Wilk test for normality
+shapiro.test(pasat$bc_totalcorrect[pasat$version == 1])
+shapiro.test(pasat$bc_totalcorrect[pasat$version == 2])
+shapiro.test(pasat$bc_totalcorrect)
+
+```
+
+The results for the Shapiro-Wilk Tests are all non-significant such that the transformation can be regarded as successful. As $\lambda \neq 0$, the BoxCox-Transformation with $\frac{{\text{x}^\lambda - 1}}{\lambda}$ hat do be applied. As the p-values are even higher as they are for the log-transformation, this is another argument for the BoxCox-Transformation.
+
+```{r box cox transformed PASAT histogram, echo= FALSE}
+# Make Plot --------------------------------------------------------------------
+ggplot(pasat, aes(x = bc_totalcorrect, fill = version)) + 
+  # Plot Histogram
+  geom_histogram(binwidth = 0.3, position = 'dodge', na.rm=TRUE) +
+  # Customize Plot
+  labs(x = 'BoxCox-Transformed Totalcorrect',
+       y = 'Frequency',
+       title = 'Histogram BoxCox-Transformed Totalcorrect') +
+  # Scale Axis
+  scale_x_continuous(limits = c(7.5,13))
+```
+
+The histogram for the data after Box-Cox Transformation looks quite similar to the log-transformed data. The values are much higher, however this is not relevant as long as the relations stay the same.
+
+### Test for Outlier
+
+```{r Outlier for PASAT Totalcorrect, echo=FALSE}
+# Get Exact Value with the ID for the outlier
+out_val <- min(unlist(plot_data[['data']][[1]][['outliers']][1]))
+id      <- pasat$ID[pasat$totalcorrect == out_val]
+```
+
+The outlier had the 'totalcorrect' value: `r out_val` and the following ID: `r id`.
+
+```{r compare outlier, echo=FALSE, include = FALSE}
+# Get data for other performance tests 
+setwd(paste0(getwd(),'/data'))
+pvt <- read.csv(paste0(getwd(),'/inquisit/PVT.csv'))
+bart <- read.csv(paste0(getwd(),'/inquisit/BART.csv'))
+
+# PVT -------------------------------------------------------------------------- 
+mean_pvt_l <- mean(pvt$meanRT_l)
+id_pvt_l   <- pvt$meanRT_l[pvt$ID == id]
+
+mean_pvt_nl <- mean(pvt$meanRT_nl)
+id_pvt_nl   <- pvt$meanRT_nl[pvt$ID == id]
+
+# BART -------------------------------------------------------------------------
+mean_bart_l <- mean(bart$totalearnings_l)
+id_bart_l   <- bart$totalearnings_l[pvt$ID == id]
+
+mean_bart_nl <- mean(bart$totalearnings_nl)
+id_bart_nl   <- bart$totalearnings_nl[pvt$ID == id]
+```
+
+The comparison of PVT values reveals that the mean RT in the PVT for `r id` is: `r round(id_pvt_l,2)` while the overall mean is: `r round(mean_pvt_l,2)`. It therefore can be assumed, that this participant did not perform well in the PVT too. The same is true for the Non-Light Condition. The individual score is: `r round(id_pvt_nl,2)` while the mean is: `r round(mean_pvt_nl,2)`
+
+The comparison of BART values reveals that the Total Earnings in the BART for `r id` is: `r round(id_bart_l,2)` while the overall mean is: `r round(mean_bart_l,2)`. It therefore can be assumed, that this participant did not perform well in the BART too. The same is true for the Non-Light Condition. The individual score is: `r round(id_bart_nl,2)` while the mean is: `r round(mean_bart_nl,2)`
+
+Given the results for this particular outlier, this participant shows quite odd performance scores which are probably due to a lack of skills as the participant is remembered and low compliance seems unlikely here.
+
+```{r Clean Environment 3, echo=FALSE}
+# Clean Environment
+rm(list = ls()[!ls() %in% c('data', 'data_long', 'sdRplot')])
+```
+
+## PVT
+
+```{r, echo = FALSE, include=FALSE}
+# Get data
+setwd(paste0(getwd(),'/data'))
+pvt <- read.csv(paste0(getwd(),'/inquisit/PVT.csv'))
+pvt_long <- read.csv(paste0(getwd(),'/inquisit/PVT_long.csv'))
+```
+
+### Summarize Data
+
+```{r summary PVT, echo = FALSE}
+# Prepare ----------------------------------------------------------------------
+# Summary
+summary(pvt[,!(names(pvt) %in% c('ID', 
+                                 'version', 
+                                 'elapsedtime_l',
+                                 'elapsedtime_nl',
+                                 'starttime_l', 
+                                 'endtime_l', 
+                                 'starttime_nl',
+                                 'endtime_nl'))])
+```
+
+There is one case with values which cannot be true in numberOfLapses_l. As this variable counts the reactions which take <150ms and >500ms it is not possible to reach a score of -1. Therefore this value needs to be transformed to 0.
+
+```{r transformation nol, echo=FALSE}
+pvt$numberOfLapses_l[pvt$numberOfLapses_l == -1] = 0
+pvt_long$numberOfLapses[pvt_long$numberOfLapses == -1] = 0
+```
+
+```{r distributions PVT, echo = FALSE}
+# Reshape Data
+# Mean & MeanRT500
+pvt_box_mean <- gather(pvt_long[c('light', 'meanRT', 'meanRT500')], 
+                       variable,
+                       value, 
+                       -light)
+
+# Reaction Time & Reaction TimeRT500
+pvt_box_rec <- gather(pvt_long[c('light', 'reciprocalMeanRT', 'reciprocalMeanRT500')],
+                      variable,
+                      value,
+                      -light)
+
+# Number of Lapses
+pvt_box_lap <- gather(pvt_long[c('light', 'numberOfLapses')],
+                      variable,
+                      value,
+                      -light)
+pvt_box_lap$light <- as.factor(pvt_box_lap$light)
+
+# False Starts
+pvt_box_fs <- gather(pvt_long[c('light','countFalseStarts')],
+                     variable,
+                     value,
+                     -light)
+pvt_box_fs$light <- as.factor(pvt_box_fs$light)
+
+# Make Plots -------------------------------------------------------------------
+# Reaction Time
+# Boxplots mean reaction time and meanRT500
+plot_mean <- ggplot(pvt_box_mean, aes(x=variable, y=value, fill=light)) +
+  # Make Boxplot
+  geom_boxplot() +
+  # Add Mean Indicator
+  stat_summary(fun = mean, geom = 'point', 
+               shape = 18, size = 3, color = 'black', 
+               position = position_dodge(width = 0.75),
+               show.legend = FALSE) +
+  # Customize Plot
+  labs(x = 'Variable',
+       y = 'Reaction Time',
+       fill = 'Condition',
+       title = 'Mean Reaction Time') +
+  # Set fontsize
+  theme(plot.title = element_text(size = 11))
+
+## Plot boxplots reciprocalMeanRT and reciprocalMeanRT500
+plot_reciprocal <- ggplot(pvt_box_rec, aes(x=variable, y=value, fill=light)) +
+  # Make Boxplot
+  geom_boxplot() +
+  # Add Mean Indicator
+  stat_summary(fun = mean, geom = 'point', 
+               shape = 18, size = 3, color = 'black', 
+               position = position_dodge(width = 0.75),
+               show.legend = FALSE) +
+  # Customize Plot
+  labs(x = 'Variable',
+       y = 'Response Time',
+       fill = 'Condition',
+       title = 'Reciprocal Mean Reaction Time') +
+  # Set fontsize and angle
+  theme(plot.title = element_text(size = 11),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Combine plots side by side
+grid.arrange(plot_mean, plot_reciprocal, ncol = 2)
+
+# Failures
+# Boxplots numberOfLapses
+plot_lap <- ggplot(pvt_box_lap, aes(x=variable, y=value, fill=light)) +
+  # Make Boxplot
+  geom_boxplot() +
+  # Add Mean Indicator
+  stat_summary(fun = mean, geom = 'point', 
+               shape = 18, size = 3, color = 'black', 
+               position = position_dodge(width = 0.75),
+               show.legend = FALSE) +
+  # Customize Plot
+  labs(x = 'Variable',
+       y = 'Time',
+       fill = 'Condition',
+       title = 'Number of Lapses')
+
+# Plot boxplots countFalseStarts
+plot_fs <- ggplot(pvt_box_fs, aes(x=variable, y=value, fill=light)) +
+  # Make Boxplot
+  geom_boxplot() +
+  # Add Mean Indicator
+  stat_summary(fun = mean, geom = 'point', 
+               shape = 18, size = 3, color = 'black', 
+               position = position_dodge(width = 0.75),
+               show.legend = FALSE) +
+  # Customize Plot
+  labs(x = 'Variable',
+       y = 'Time',
+       fill = 'Condition',
+       title = 'Count of False Starts')
+
+# Combine plots side by side
+grid.arrange(plot_lap, plot_fs, ncol = 2)
+
+# Complete ---------------------------------------------------------------------
+# Get Outlier-Data
+plot_data <- ggplot_build(plot_mean)
+
+# Clean Environment
+rm(list = ls()[!ls() %in% c('data', 'pvt', 'pvt_long', 'plot_data', 'sdRplot')])
+```
+
+The parameters of the PVT have a lot of outliers, which a strategy for still has to be found. However, the correction through removal of reaction values higher than 500ms removed the most outliers. Particularly for reaction times and number of lapses a difference between both conditions (light/ no-light) can be assumed. As average reaction times seem very unlikely, they need to be investigated more deeply in the next step.
+
+The Number of Lapses particularly for the light condition is concerning. If the light condition had a detrimental influence on performance in this test, the outliers cannot just be removed, but probably are an effect of light.
+
+Count False Starts is as its name suggests count data and box plots indicate a Poisson distribution, so that compared to all other parameters it could directly be tested on Poisson distribution.
+
+Only the reaction times without values exceeding 500ms are relevant, such that these are the only ones which will be tested on $\mathcal{N}$. However if this strategy is chosen to remove values exceeding 500ms, the number of lapses have to be investigated too. Otherwise, the results would be biased as the intervention was expected to have an influence and this influence would be cut out by just observing values under a certain threshold.
+
+### Test for Distribution
+
+#### Reaction Times
+
+```{r, echo=FALSE}
+# Test for Normality
+# SW Test ----------------------------------------------------------------------
+# Variable Indication
+print('Mean RT500-Light')
+# Conduct Test
+shapiro.test(pvt$meanRT500_l)
+
+# Variable Indication
+print('Mean RT500-Non-Light')
+# Conduct Test
+shapiro.test(pvt$meanRT500_nl)
+
+# Variable Indication
+print('Mean Reciprocal RT500-Light')
+# Conduct Test
+shapiro.test(pvt$reciprocalMeanRT500_l)
+
+# Variable Indictaion
+print('Mean Reciprocal RT500-Non-Light')
+# Conduct Test
+shapiro.test(pvt$reciprocalMeanRT500_nl)
+
+# Variable Indication
+print('Mean Reciprocal RT-Light')
+# Conduct Test
+shapiro.test(pvt$reciprocalMeanRT_l)
+
+# Variable Indication
+print('Mean Reciprocal RT-Non-Light')
+# Conduct Test
+shapiro.test(pvt$reciprocalMeanRT_nl)
+
+# Make Plots -------------------------------------------------------------------
+# Define layout with two plots side by side
+par(mfrow = c(2, 3))
+
+# Default RT500
+# Light Condition
+PlotQQ(pvt$meanRT500_l, main = 'QQ-Plot Mean RT500 - Light', cex.main = 0.8)
+# Non-Light Condition
+PlotQQ(pvt$meanRT500_nl, main = 'QQ-Plot Mean RT500 - Non-Light', cex.main = 0.8)
+
+# Reciprocal RT500
+# Light Condition
+PlotQQ(pvt$reciprocalMeanRT500_l, main = 'QQ-Plot Mean Rec.RT500 - L', cex.main = 0.8)
+# Non-Light Condition
+PlotQQ(pvt$reciprocalMeanRT500_nl, main = 'QQ-Plot Mean Rec.RT500 - N-L', cex.main = 0.8)
+
+# Default Reciprocal RT
+# Light Condition
+PlotQQ(pvt$meanRT_l, main = 'QQ-Plot Mean Rec.RT - Light', cex.main = 0.8)
+# Non-Light Condition
+PlotQQ(pvt$meanRT_nl, main = 'QQ-Plot Mean Rec.RT - Non-Light', cex.main = 0.8)
+
+# Reset the layout
+par(mfrow = c(1, 1))
+```
+
+No SW Test reached significance, however Mean RT-Non-Light and Mean Reciprocal RT-Light showed a tendency towards significance. Despite, QQ-Plots reveal no strong deviation from $\mathcal{N}$, particularly as even for normally distributed variables, points at the end of the line start to deviate from the ideal one. Furthermore, it can be concluded, that QQ-Plots for the reciprocal mean RT are closer to $\mathcal{N}$. The reaction times without lapse removal are clearly $non-\mathcal{N}$. If its chosen to take this metric for inference analysis, a strategy to account for this deviation has to be found. A Goodness of Fit Test should give more insights about the right handling.
+
+##### Light
+
+```{r, echo=FALSE}
+# Goodness of Fit Test for Rec.RT - Light 
+print('Goodness of Fit Test for Rec.RT - Light') 
+descdist(pvt$reciprocalMeanRT_l, discrete = FALSE)
+```
+
+The distribution for Reciprocal Reaction Time in the light condition seems to follow either a beta, gamma or Weibull distribution. Further handling strategy for this has to be found.
+
+##### Non-Light
+
+```{r, echo=FALSE}
+# Goodness of Fit Test for Rec.RT - Non-Light 
+print('Goodness of Fit Test for Rec.RT - Non-Light') 
+descdist(pvt$reciprocalMeanRT_nl, discrete = FALSE)
+```
+
+In the non-light condition the distribution seems to be gamma.
+
+#### Number of Lapses
+
+```{r normality test numer of lapses, echo=FALSE}
+# Test for Normality
+# Shapiro-Wilk Test ------------------------------------------------------------
+# Light Condition
+print('No. of Lapses - Light')
+# Conduct Test
+shapiro.test(pvt$numberOfLapses_l)
+
+# Non-Light Condition
+print('No. of Lapses - Non-Light')
+# Conduct Test
+shapiro.test(pvt$numberOfLapses_nl)
+
+# Make Plots -------------------------------------------------------------------
+# Define layout with two plots side by side
+par(mfrow = c(1, 2))
+
+# Light Condition
+PlotQQ(pvt$numberOfLapses_l, 
+       main = 'QQ-Plot No. of Lapses - Light',
+       cex.main = 0.8)
+# Non-Light Condition
+PlotQQ(pvt$numberOfLapses_nl, 
+       main = 'QQ-Plot No. of Lapses - Non-Light',
+       cex.main = 0.8)
+
+# Reset the layout
+par(mfrow = c(1, 1))
+```
+
+Number of Lapses is definitely $non-\mathcal{N}$. A Goodness of Fit Test should give more insights about the right handling. Furthermore it should be considered, to normalize the number of lapses by the amount of items, such that a more realistic value is presented.
+
+##### Light
+
+```{r, echo=FALSE}
+# Goodness of Fit Test for Number of Lapses - Light
+print('Goodness of Fit Test for Number of Lapses - Light')
+descdist(pvt$numberOfLapses_l, discrete = TRUE)
+```
+
+The distribution for Number of Lapses in the light condition cannot be labelled by the Cullen and Frey Graph.
+
+##### Non-Light
+
+```{r, echo=FALSE}
+# Goodness of Fit Test for Number of Lapses - Non-Light
+print('Goodness of Fit Test for Number of Lapses - Non-Light')
+descdist(pvt$numberOfLapses_nl, discrete = TRUE)
+```
+
+In the non-light condition this is different and a negative binomial distribution can be assumed such that BoxCox-Transformation should be considered too.
+
+### Test for Outliers in Mean RT
+
+```{r loar PVT-raw, include=FALSE}
+# Load Raw-Files ---------------------------------------------------------------
+# Set Working-Directory
+setwd(paste0(getwd(),'/data'))
+# Load Data
+suppressWarnings({
+pvt_raw <- read_delim('inquisit/#_PVT_Raw_Gesamt.csv',
+                      delim = ';', escape_double = FALSE, trim_ws = TRUE,
+                      locale = locale(decimal_mark = ','))
+})
+```
+
+```{r, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Get IDs of Participants with too high mean
+out_l_thres   <- min(unlist(plot_data$data[[1]]$outliers[1]))
+out_nl_thres  <- min(unlist(plot_data$data[[1]]$outliers[2]))
+
+# Save IDs to respective objects
+out_ids_l      <- pvt$ID[pvt$meanRT_l >= out_l_thres]
+out_ids_nl     <- pvt$ID[pvt$meanRT_nl >= out_nl_thres]
+
+# Merge outlier IDs
+out_ids        <- c(out_ids_l, out_ids_nl) 
+ids_ver        <- c(rep('light',length(out_ids_l)),
+                    rep('nlight',length(out_ids_nl)))
+
+# Prepare Dataframe for Reaction Time-Vectors
+out_df <- data.frame(ID     = vector(),
+                     Values = vector(),
+                     Light  = vector())
+
+# Extract Values ---------------------------------------------------------------
+# Iterate through each ID
+for (i in 1:length(out_ids)){
+  ver    <- unique(pvt_raw$Version[pvt_raw$subject == out_ids[i]])
+  light  <- ids_ver[i]
+  if (ver == 'Ver_1' & light == 'light'){
+    values <- pvt_raw$rt[pvt_raw$subject == out_ids[i] & pvt_raw$Durchgang == 1]
+  } else if (ver == 'Ver_2' & light == 'light'){
+    values <- pvt_raw$rt[pvt_raw$subject == out_ids[i] & pvt_raw$Durchgang == 2]
+  } else if (ver == 'Ver_1' & light == 'nlight'){
+    values <- pvt_raw$rt[pvt_raw$subject == out_ids[i] & pvt_raw$Durchgang == 2]
+  } else if (ver == 'Ver_2' & light == 'nlight'){
+    values <- pvt_raw$rt[pvt_raw$subject == out_ids[i] & pvt_raw$Durchgang == 1]
+  }
+  light  <- rep(light, length(values))
+  id     <- rep(out_ids[i],length(values))
+  df     <- data.frame(ID     = id,
+                       Values = values,
+                       Light  = light)
+  out_df <- rbind(out_df, df)
+}
+
+# Make Plot --------------------------------------------------------------------
+ggplot(out_df, aes(x=ID, y=Values, fill=Light)) + 
+  # Make Boxplot
+  geom_boxplot(na.rm=TRUE) +
+  # Customize Plot
+  labs(x = 'ID',
+       y = 'Reaction Time',
+       fill = 'Condition', 
+       title = 'Distribution of outlier Cases')
+```
+
+There are 10 participants forming the outliers for the mean RT in both conditions. However, those numbers are not equal as we have 8 outliers in the light condition and 2 in the non-light condition. It further is important to get the ratio of $RT > 500$ to the all reaction times to see, if people were just slow in general or there were single cases.
+
+```{r Outliers over 500, echo=FALSE}
+# Outliers over 500 for each Participant
+# Prepare ----------------------------------------------------------------------
+# Set up object to store data in
+out_500 <- data.frame(ID    = NULL,
+                      count = NULL,
+                      ratio = NULL,
+                      v_avg  = NULL,
+                      light = NULL)
+
+# Compute Averages -------------------------------------------------------------
+# Iterate through each condition
+for (light in c('light','nlight')) {
+  # Set up vectors to store results
+  out_ls  <- list()
+  ID      <- vector()
+  count   <- vector()
+  ratio   <- vector()
+  v_avg   <- vector()
+  li      <- vector()
+  
+  # Set up conting variable
+  i <- 1
+  
+  # Iterate through each ID
+  for (id in unique(out_df$ID[out_df$Light == light])) {
+    # Assign results
+    value <- out_df$Values[out_df$ID == id & out_df$Light == light]
+    v_avg <- c(v_avg, mean(value, na.rm = TRUE))
+    count <- c(count, length(value[value > 500]))
+    ratio <- c(ratio, (count[i] / length(value)))
+    ID <- c(ID, id)
+    i <- i+1
+    }
+  li <- rep(light, length(ID))
+  df <- data.frame(ID    = ID,
+                   count = count,
+                   ratio = round(ratio*100,3),
+                   mean  = v_avg,
+                   light = li)
+  out_500 <- rbind(out_500, df)
+}
+
+# Results ----------------------------------------------------------------------
+# Print Results
+print(out_500)
+```
+
+The ratio never falls below 40% for the outlier cases and tend to be even higher. Given the unequal numbers of occurencies in both conditions this patter might be due to the light-intervention. Only two instances are found in both conditions such that they can be considered to be slow in general. If these outliers are to be removed, I would suggest to only remove the ones occuring in both conditions as otherwise the effect of the light condition would be biased.
+
+## Inference Test
+
+### Reaction Time
+
+For the inference test of the reaction time, again linear mixed models will be fit with predictors version and sex. The reaction time measurement which is used as the dependent variable will be the reciprocalMeanRT500 (response time).
+
+```{r linear model reaction time, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Subset Data
+model_data <- merge(pvt[c('ID',
+                          'version',
+                          'reciprocalMeanRT500_l',
+                          'reciprocalMeanRT500_nl')],
+                    data[c('ID',
+                           'sex')],
+                    by = 'ID')
+
+# Reshape Data
+model_data <- pivot_longer(model_data,
+                           cols = c(reciprocalMeanRT500_l, reciprocalMeanRT500_nl),
+                           names_to = 'condition',
+                           values_to = 'RT')
+
+# Renaming the condition values
+model_data$condition <- ifelse(model_data$condition == 'reciprocalMeanRT500_l',
+                               'Light', 'Non-Light')
+
+# Model ------------------------------------------------------------------------
+model <- lmer(RT ~ condition * sex + (1 | ID), data = model_data)
+
+# Assess Results----------------------------------------------------------------
+# Print Results
+rsq.lmm(model)
+summary(model)
+
+# Add Diagnostics---------------------------------------------------------------
+# Check for multicollinearity
+vif(model)
+# Plot Diagnostics
+gglm(model)
+```
+
+The Linear Model shows, that there is an effect of condition on response time, such that participants in the light condition performed worse than in the non-light condition. Furthermore female participants performed worse then men. This will be inspected by a plot:
+
+```{r plot inference test response time, echo=FALSE}
+# Make Plot --------------------------------------------------------------------
+ggplot(model_data, aes(x = condition, y = RT, fill = sex)) +
+  # Make Boxplot
+  geom_boxplot() +
+  # Add Mean Indicator
+  stat_summary(fun = mean, geom = 'point', 
+               shape = 18, size = 3, color = 'black', 
+               position = position_dodge(width = 0.75),
+               show.legend = FALSE) +
+  # Customize Plot
+  labs(x = 'Condition', 
+       y = 'Response Time', 
+       fill = 'Sex',
+       title = 'Boxplot of Reciprocal Mean RT by Condition and Sex')
+```
+
+It is observable that there is no interaction between condition and sex.
+
+### Number of Lapses
+
+Number of Lapses is obviously count data such that we need to change to linear model to a zero inflate general linear model (GLM). As distribution family negative binomial was chosen.
+
+```{r generalized linear model number of lapses, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Subset Data
+model_data <- merge(pvt[c('ID',
+                          'version',
+                          'numberOfLapses_l',
+                          'numberOfLapses_nl')],
+                    data[c('ID',
+                           'sex')],
+                    by = 'ID')
+
+# Reshape Data
+model_data <- pivot_longer(model_data,
+                           cols = c(numberOfLapses_l, numberOfLapses_nl),
+                           names_to = 'condition',
+                           values_to = 'Lapses')
+
+# Renaming the condition values
+model_data$condition <- ifelse(model_data$condition == 'numberOfLapses_l',
+                               'Light', 'Non-Light')
+
+# Factorize columns
+model_data$condition <- factor(model_data$condition)
+model_data$ID <- factor(model_data$ID)
+
+# Model ------------------------------------------------------------------------
+library(glmmTMB)
+model <- glmmTMB(Lapses ~ condition * sex + (1 | ID),
+                 ziformula = ~1,
+                 family = nbinom2,
+                 data = model_data)
+
+# Assess Results----------------------------------------------------------------
+# Print Results
+summary(model)
+
+# Diagnostics ------------------------------------------------------------------
+library(DHARMa)
+testDispersion(model)
+
+# t.b.cared for
+simulationOutput <- simulateResiduals(fittedModel = model, plot = F)
+plot(simulationOutput)
+```
+
+The Linear Model shows that there is an effect of the light condition on the number of lapses, which is in line with the findings of worse response time in the light condition. Furthermore, women tend to have more lapses but there seems to be no interaction. The diagnostics plot shows, that the residuals are $\mathcal{N}$.
+
+```{r boxplot inference test number of lapses, echo=FALSE}
+# Make Plot --------------------------------------------------------------------
+ggplot(model_data, aes(x = condition, y = Lapses, fill = sex)) +
+  # Make Boxplot
+  geom_boxplot() +
+  # Add Mean Indicator
+  stat_summary(fun = mean, geom = 'point', 
+               shape = 18, size = 3, color = 'black', 
+               position = position_dodge(width = 0.75),
+               show.legend = FALSE) +
+  # Customize Plot
+  labs(x = 'Condition', 
+       y = 'Number of Lapses', 
+       fill = 'Sex',
+       title = 'Boxplot of Number of Lapses by Condition and Sex')
+```
+
+The Boxplot shows, that there is a main effect of condition and sex but no interaction between both variables.
+
+### False Start Count
+
+Likewise for the number of lapses, false start count needs to be tested by a zero inflated GLM. Again negative binomial distribution was chosen.
+
+```{r generalized linear model reaction time, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Subset Data
+model_data <- merge(pvt[c('ID',
+                          'version',
+                          'countFalseStarts_l',
+                          'countFalseStarts_nl')],
+                    data[c('ID',
+                           'sex')],
+                    by = 'ID')
+
+# Reshape Data
+model_data <- pivot_longer(model_data,
+                           cols = c(countFalseStarts_l, countFalseStarts_nl),
+                           names_to = 'condition',
+                           values_to = 'FS')
+
+# Renaming the condition values
+model_data$condition <- ifelse(model_data$condition == 'countFalseStarts_l',
+                               'Light', 'Non-Light')
+
+# Factorize columns
+model_data$condition <- factor(model_data$condition)
+model_data$ID <- factor(model_data$ID)
+
+# Model ------------------------------------------------------------------------
+library(glmmTMB)
+model <- glmmTMB(FS ~ condition * sex + (1 | ID),
+                 ziformula = ~0,
+                 family = nbinom2,
+                 data = model_data)
+
+# Assess Results----------------------------------------------------------------
+# Print Results
+summary(model)
+
+# Diagnostics ------------------------------------------------------------------
+library(DHARMa)
+testDispersion(model)
+
+# t.b.cared for
+simulationOutput <- simulateResiduals(fittedModel = model, plot = F)
+plot(simulationOutput)
+```
+
+The linear model shows that there is no effect of condition on false start count. However, female participants showed significantly less false start counts. There is no interaction between both variables. The diagnostics plots show $\mathcal{N}$ of the residuals and there is no over dispersion of the model. 
+
+```{r boxplot inference test false start count, echo=FALSE}
+# Make Plot --------------------------------------------------------------------
+ggplot(model_data, aes(x = condition, y = FS, fill = sex)) +
+  # Make Boxplot
+  geom_boxplot() +
+  # Add Mean Indicator
+  stat_summary(fun = mean, geom = 'point', 
+               shape = 18, size = 3, color = 'black', 
+               position = position_dodge(width = 0.75),
+               show.legend = FALSE) +
+  # Customize Plot
+  labs(x = 'Condition', 
+       y = 'False Start Count', 
+       fill = 'Sex',
+       title = 'Boxplot of False Start Counts by Condition and Sex')
+```
+
+The Boxplot underline the findings of the GLM, that there is no effect of condition but of sex and no interaction.
+
+```{r Clean Environment 4, echo=FALSE}
+# Clean Environment
+rm(list = ls()[!ls() %in% c('data', 'pvt', 'pvt_long', 'sdRplot')])
+```
+
+## BART
+
+```{r, echo=FALSE, include = FALSE}
+# Set Working Directory
+setwd(paste0(getwd(),'/data'))
+# Get Data
+bart <- read.csv(paste0(getwd(),'/inquisit/BART.csv'))
+bart_long <- read.csv(paste0(getwd(),'/inquisit/BART_long.csv'))
+```
+
+### Summarize Data:
+
+```{r BART summary, echo=FALSE}
+# Summary of BART variables ----------------------------------------------------
+summary(bart[,!(names(bart) %in% c('ID', 
+                                   'version', 
+                                   'elapsedtime_l',
+                                   'elapsedtime_nl'))])
+```
+
+```{r BART boxplots, echo = FALSE}
+# Prepare ----------------------------------------------------------------------
+# Factorize light variable
+bart_long$light <- as.factor(bart_long$light)
+
+# Reshape data
+bart_box <- gather(bart_long[c('light',
+                                'totalearnings',
+                                'total_explosions')], variable, value, -light)
+
+# Make Plot --------------------------------------------------------------------
+ggplot(bart_box, aes(x=variable, y=value, fill=light)) +
+  # Make Boxplot
+  geom_boxplot() + 
+  # Add Mean Indicator
+  stat_summary(fun = mean, geom = 'point', 
+               shape = 18, size = 3, color = 'black', 
+               position = position_dodge(width = 0.75),
+               show.legend = FALSE) +
+  # Customize Plot
+  labs(x = 'Variable',
+       y = 'Value',
+       fill = 'Condition',
+       title = 'Boxplots Total Explosions and Totalearnings')
+
+# Prepare ----------------------------------------------------------------------
+# Reshape data
+bart_box <- gather(bart_long[c('light',
+                               'totalpumpcount')], variable, value, -light)
+
+# Make Plot --------------------------------------------------------------------
+ggplot(bart_box, aes(x=variable, y=value, fill=light)) +
+  # Make boxplot
+  geom_boxplot() + 
+  # Add Mean Indicator
+  stat_summary(fun = mean, geom = 'point', 
+               shape = 18, size = 3, color = 'black', 
+               position = position_dodge(width = 0.75),
+               show.legend = FALSE) +
+  # Customize Plot
+  labs(x = 'Variable',
+       y = 'Value',
+       fill = 'Condition',
+       title = 'Boxplots Totalpumpcount')
+```
+
+At first glance, mean and median of all variables do not differ much. Therefore, we can assume $\mathcal{N}$, which will be tested with Shapiro-Wilk tests and QQ-Plots for each Variable. Boxplots give a first impression of effect of light on BART-parameters. Furthermore, it seems that there is no difference between conditions on performance of BART.
+
+### Test for $\mathcal{N}$
+
+For each Variable in each version (light, no-light), the distribution will be checked by SW-Test and QQ-Plot
+
+#### Total Earnings
+
+```{r, echo=FALSE}
+# Test for Nomality
+# Shapiro Wilk Tests -----------------------------------------------------------
+# Light Condition
+print('Light')
+# Conduct Test
+shapiro.test(bart$totalearnings_l)
+
+# Non-Light Condition
+print('Non-Light')
+# Conduct Test
+shapiro.test(bart$totalearnings_nl)
+
+# QQ-Plots ---------------------------------------------------------------------
+# Set Layout for two plots
+par(mfrow = c(1, 2))
+
+# Light Condition
+PlotQQ(bart$totalearnings_l, main = 'QQ-Plot Light')
+
+# Non-Light Condition
+PlotQQ(bart$totalearnings_nl, main = 'QQ-Plot Non-Light')
+
+# Reset the layout
+par(mfrow = c(1, 1))
+```
+
+The SW-Test did not become significant and the QQ-Plot shows no significant deviation from the ideal $\mathcal{N}$
+
+#### Total Explosions
+
+```{r, echo=FALSE}
+# Shapiro-Wilk Test and QQ-Plot for total_explosions_nl
+
+# Shapiro-Wilk Tests -----------------------------------------------------------
+# Light Condition
+print('Light')
+shapiro.test(bart$total_explosions_l)
+
+# Non-Light Condition
+print('Non-Light')
+shapiro.test(bart$total_explosions_nl)
+
+# QQ Plots ---------------------------------------------------------------------
+# Define layout with two plots side by side
+par(mfrow = c(1, 2))
+
+# Light Condition
+PlotQQ(bart$total_explosions_l, main = 'QQ-Plot Light')
+
+# Non-Light Condition
+PlotQQ(bart$total_explosions_nl, main = 'QQ-Plot Non-Light')
+
+# Reset the layout
+par(mfrow = c(1, 1))
+```
+
+The SW-Tests did not become significant and the QQ-Plots did not show significant deviations from the ideal $\mathcal{N}$. Even though SW-Test for the light condition of Total Explosions has a tendency towards statistical significance, this cannot be confirmed by QQ-Plots.
+
+#### Total Pump Count
+
+```{r, echo=FALSE}
+# Shapiro-Wilk Test and QQ-Plot for total_explosions_nl
+
+# Shapiro-Wilk Tests -----------------------------------------------------------
+# Light Condition
+print('Light')
+shapiro.test(bart$totalpumpcount_l)
+
+# Non-Light Condition
+print('Non-Light')
+shapiro.test(bart$totalpumpcount_nl)
+
+# QQ-Plots ---------------------------------------------------------------------
+# Define layout with two plots side by side
+par(mfrow = c(1, 2))
+
+# Light Condition
+PlotQQ(bart$totalpumpcount_l, main = 'QQ-Plot Light')
+
+# Non-Light Condition
+PlotQQ(bart$totalpumpcount_nl, main = 'QQ-Plot Non-Light')
+
+# Reset the layout
+par(mfrow = c(1, 1))
+```
+
+The SW-Test in the Light-Condition did not become significant and the QQ-Plot shows no significant deviation from the ideal $\mathcal{N}$. However in the Non-Light-Condition, the SW-Test became significant, such that a deviation from the ideal $\mathcal{N}$ can be assumed. However, both QQ-Plots reveal no significant deviations. Therefore, this data is handled as $\mathcal{N}$.
+
+### Inference Test
+
+Likewise to the performance metrics of the PVT, the total earnings variable will be measured if influenced by condition and sex.
+
+```{r linear model BART, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Subset Data
+model_data <- merge(bart[c('ID',
+                           'version',
+                           'totalearnings_l',
+                           'totalearnings_nl')],
+                    data[c('ID',
+                           'sex')],
+                    by = 'ID')
+
+# Reshape Data
+model_data <- pivot_longer(model_data,
+                           cols = c(totalearnings_l, totalearnings_nl),
+                           names_to = 'condition',
+                           values_to = 'TE')
+
+# Renaming the condition values
+model_data$condition <- ifelse(model_data$condition == 'totalearnings_l',
+                               'Light', 'Non-Light')
+
+# Model ------------------------------------------------------------------------
+model <- lmer(TE ~ condition * sex + (1 | ID), data = model_data)
+
+# Assess Results----------------------------------------------------------------
+# Print Results
+rsq.lmm(model)
+summary(model)
+
+# Add Diagnostics---------------------------------------------------------------
+# Check for multicollinearity
+vif(model)
+# Plot Diagnostics
+gglm(model)
+```
+
+The linear model shows, that there is no effect of condition on total earnings but female participants tend to ear significantly smaller amounts. There is no interaction between both variables.
+
+```{r boxplot inference test total earnings, echo=FALSE}
+# Make Plot --------------------------------------------------------------------
+ggplot(model_data, aes(x = condition, y = TE, fill = sex)) +
+  # Make Boxplot
+  geom_boxplot() +
+  # Add Mean Indicator
+  stat_summary(fun = mean, geom = 'point', 
+               shape = 18, size = 3, color = 'black', 
+               position = position_dodge(width = 0.75),
+               show.legend = FALSE) +
+  # Customize Plot
+  labs(x = 'Condition', 
+       y = 'Total Earnings', 
+       fill = 'Sex',
+       title = 'Boxplot of Total Earnings by Condition and Sex')
+```
+
+It can clearly be seen, that there is an effect of sec but no effect of condition or any interaction.
+
+# Semantic Differentials Study Part II
+
+## KAB
+
+### In PVT
+
+```{r KAB in PVT, echo=FALSE}
+# Prepare Data
+kab_columns <- grep('^KAB', names(data), value = TRUE)
+kab_data    <- data[kab_columns]
+
+## Set Up Labeling
+high      <- c('gelassen','gelöst','unbekümmert','entspannt','vertrauensvoll','behaglich')
+low       <- c('angespannt','beklommen','besorgt','unruhig','skeptisch','unwohl')
+scale     <- c('sehr', 'ziemlich', 'eher', 'eher', 'ziemlich', 'sehr')
+
+## Set Up Means
+col_pre_light  <- grep('^KAB_pre_PVT_l', kab_columns, value = TRUE)
+col_pos_light  <- grep('^KAB_pos_PVT_l', kab_columns, value = TRUE)
+
+col_pre_nlight <- grep('^KAB_pre_PVT_nl', kab_columns, value = TRUE)
+col_pos_nlight <- grep('^KAB_pos_PVT_nl', kab_columns, value = TRUE)
+
+## Calculate Means of each column
+pre_l_means  <- colMeans(kab_data[col_pre_light])
+pos_l_means  <- colMeans(kab_data[col_pos_light])
+
+pre_nl_means <- colMeans(kab_data[col_pre_nlight])
+pos_nl_means <- colMeans(kab_data[col_pos_nlight])
+
+## Create Matrix
+diff_data <- matrix(
+  cbind(low,high,pre_l_means,pos_l_means,
+        pre_nl_means, pos_nl_means),
+  nrow=6,ncol=6,byrow=FALSE,
+  dimnames=list(c('I1','I2','I3','I4','I5','I6'),
+                c('Low','High',
+                  'Light Pre','Light Pos',
+                  'Non-Light Pre', 'Non-Light Pos'))
+  )
+
+# Plot
+sdRplot(6, scale, 
+        6, diff_data,
+        main = 'Semantic Differential KAB in PVT')
+```
+
+In both conditions the KAB was answered stronger in the negative after the test. For the non-light condition this is not surprising but given the plot, it seems like participants in both conditions were experiencing the same level of feelings. When looking on the time before the test there could be a slight difference between the conditions so that the decline in feeling was lower for the light condition. If this is significant has to be tested.
+
+### In BART
+
+```{r, KAB in BART, echo=FALSE}
+## Set Up Means
+col_pre_light  <- grep('^KAB_pre_BART_l', kab_columns, value = TRUE)
+col_pos_light  <- grep('^KAB_pos_BART_l', kab_columns, value = TRUE)
+
+col_pre_nlight <- grep('^KAB_pre_BART_nl', kab_columns, value = TRUE)
+col_pos_nlight <- grep('^KAB_pos_BART_nl', kab_columns, value = TRUE)
+
+## Calculate Means of each column
+pre_l_means  <- colMeans(kab_data[col_pre_light])
+pos_l_means  <- colMeans(kab_data[col_pos_light])
+
+pre_nl_means <- colMeans(kab_data[col_pre_nlight])
+pos_nl_means <- colMeans(kab_data[col_pos_nlight])
+
+## Create Matrix
+diff_data <- matrix(
+  cbind(low,high,pre_l_means,pos_l_means,
+        pre_nl_means, pos_nl_means),
+  nrow=6,ncol=6,byrow=FALSE,
+  dimnames=list(c('I1','I2','I3','I4','I5','I6'),
+                c('Low','High',
+                  'Light Pre','Light Pos',
+                  'Non-Light Pre', 'Non-Light Pos'))
+  )
+
+# Plot
+sdRplot(6, scale, 
+        6, diff_data,
+        main = 'Semantic Differential KAB in BART')
+```
+
+Here can be seen a different picture as in both conditions the feelings were at the same level before the test but after the test, the feelings in the light conditions were worse.
+
+```{r Clean Environment 5, echo=FALSE}
+# Clean Environment
+rm(list = ls()[!ls() %in% c('data', 'pvt', 'pvt_long', 'sdRplot')])
+```
+
+## UEQ
+
+### In PVT
+
+```{r UEQ in PVT, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Set Columns
+UEQ_columns <- grep('^UEQ_', names(data), value = TRUE)
+# Subset Dataframe
+UEQ_data    <- data[UEQ_columns]
+
+# Set Up Labeling
+high      <- c('unterstützend','einfach','effizient','übersichtlich',
+               'spannend','interessant','originell','neuartig')
+low       <- c('behindernd','kompliziert','ineffizient','verwirrend',
+               'langweilig','uninteressant','konventionell','herkömmlich')
+scale     <- c('3', '2', '1', '0', '1', '2','3')
+
+# Set Up Means
+col_light  <- grep('^UEQ_PVT_l', UEQ_columns, value = TRUE)
+col_nlight <- grep('^UEQ_PVT_nl', UEQ_columns, value = TRUE)
+
+# Calculate Means of each column
+l_means   <- colMeans(UEQ_data[col_light])
+nl_means  <- colMeans(UEQ_data[col_nlight])
+
+# Create Matrix
+diff_data <- matrix(
+  cbind(low,high,l_means,nl_means),
+  nrow=8,ncol=4,byrow=FALSE,
+  dimnames=list(c('I1','I2','I3','I4','I5','I6','I7','I8'),
+                c('Low','High','Light','Non-Light'))
+  )
+
+# Make Plot --------------------------------------------------------------------
+sdRplot(7, scale, 
+        8, diff_data,
+        main = 'Semantic Differential UEQ in PVT')
+```
+
+Keeping attention on light, breathing and performing in the test seemed to be complicated and difficult for the participants in the PVT. They also found the intervention while performing the tests to be inefficient and confusing. However, it was less boring and uninteresting and neither conventional nor standard. But also it seemed not to be original and new.
+
+### In BART
+
+```{r UEQ in BART, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Set Up Means
+col_light  <- grep('^UEQ_BART_l', UEQ_columns, value = TRUE)
+col_nlight <- grep('^UEQ_BART_nl', UEQ_columns, value = TRUE)
+
+# Calculate Means of each column
+l_means   <- colMeans(UEQ_data[col_light])
+nl_means  <- colMeans(UEQ_data[col_nlight])
+
+# Create Matrix
+diff_data <- matrix(
+  cbind(low,high,l_means,nl_means),
+  nrow=8,ncol=4,byrow=FALSE,
+  dimnames=list(c('I1','I2','I3','I4','I5','I6','I7','I8'),
+                c('Low','High','Light','Non-Light'))
+  )
+
+# Make Plot --------------------------------------------------------------------
+sdRplot(7, scale, 
+        8, diff_data,
+        main = 'Semantic Differential UEQ in BART')
+```
+
+The very same picture can be drawn from the UEQ in BART. The differences to the plot before seem negligible.
+
+## Disturbance
+
+The Questionnaire 'Störung bei Bildschirmarbeit' (SBS) should ask for possible detrimental effects of the light on the eyes, headache and concentration. Here it has to be considered, that the brightness of the lights did not match the setting the participants could make. Therefore the results have to be treated cautiously.
+
+```{r SBS in PVT, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Get Columns
+SBS_columns <- grep('^SBS_', names(data), value = TRUE)
+# Subset Dataframe
+SBS_data    <- data[SBS_columns]
+
+# Set Up Labeling
+high      <- c('Augenbeschwerden','Kopfschmerzen','abgelenkt')
+low       <- c('keine','keine','nicht')
+scale     <- c('keine', '1', '2', '3', 'sehr stark')
+
+# Set Up Means
+col_light  <- grep('^SBS_PVT_l', SBS_columns, value = TRUE)
+col_nlight <- grep('^SBS_PVT_nl', SBS_columns, value = TRUE)
+
+# Calculate Means of each column
+l_means   <- colMeans(SBS_data[col_light] + 1)
+nl_means  <- colMeans(SBS_data[col_nlight] + 1)
+
+# Create Matrix
+diff_data <- matrix(
+  cbind(low,high,l_means,nl_means),
+  nrow=3,ncol=4,byrow=FALSE,
+  dimnames=list(c('I1','I2','I3'),
+                c('Low','High','Light','Non-Light'))
+  )
+
+# Make Plot --------------------------------------------------------------------
+sdRplot(5, scale, 
+        3, diff_data,
+        main = 'Semantic Differential SBS in PVT')
+```
+
+The light neither caused eye problems nor headaches. However if was distracting from the work which could also be seen in the patterns of the UEQ, such that people responded to find the breathing with light complicated and inefficient.
+
+```{r SBS in BART, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Set Up Means
+col_light  <- grep('^SBS_BART_l', SBS_columns, value = TRUE)
+col_nlight <- grep('^SBS_BART_nl', SBS_columns, value = TRUE)
+
+# Calculate Means of each column
+l_means   <- colMeans(SBS_data[col_light] + 1)
+nl_means  <- colMeans(SBS_data[col_nlight] + 1)
+
+# Create Matrix
+diff_data <- matrix(
+  cbind(low,high,l_means,nl_means),
+  nrow=3,ncol=4,byrow=FALSE,
+  dimnames=list(c('I1','I2','I3'),
+                c('Low','High','Light','Non-Light'))
+  )
+
+# Make Plot --------------------------------------------------------------------
+sdRplot(5, scale, 
+        3, diff_data,
+        main = 'Semantic Differential SBS in BART')
+```
+
+The very same results are found for the SBS while performing the BART.
+
+```{r Clean Environment 6, echo=FALSE}
+# Clean Environment
+rm(list = ls()[!ls() %in% c('data', 'pvt', 'pvt_long')])
+```
+
+# Calibration
+
+```{r get HRV data, echo=FALSE}
+cal <- read.csv(paste0(getwd(),'/data/heartrate/calibration.csv'))
+hrv <- read.csv(paste0(getwd(),'/data/heartrate/average_hrv.csv'))
+```
+
+When the calibration data is inspected it must be noted, that there are two versions: The subjectively noted out of the program display and the objectively calculated. There might be strong deviations which are mainly due to calculation issues of the display in the beginning of the study. However, even after correction of the calculation there are deviations.
+
+```{r calibration box plots, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Subset Dataframe for relevant columns
+rel_col <- grep('*cal*',names(cal), value = TRUE)
+cal_sub <- cal[rel_col]
+
+# Transform to long format
+cal_long <- cal_sub %>%
+  gather(key, value, starts_with('new_cal_'), starts_with('old_cal_')) %>%
+  separate(key, into = c('method', 'freq'), sep = '_cal_') %>%
+  mutate(method = factor(method, levels = c('new', 'old')))
+
+# Define the desired order of frequency values
+order <- c('4', '6', '8', '10')
+
+# Convert freq to factor with desired order
+cal_long$freq <- factor(cal_long$freq, levels = order)
+
+# Make Plot --------------------------------------------------------------------
+ggplot(cal_long, aes(x = factor(freq), y = value, fill = method)) +
+  # Make Boxplot
+  geom_boxplot() +
+  # Customize Plot
+  labs(x = 'Breathing Rate', y = 'HRV', fill = 'Collection Method')
+```
+
+The plot indicates, that there is not much difference between the type of collection of calibration frequency. Unsurprisingly there are more outliers for the old collection method as there are \~15 participants which were measured with the incorrect calculation. The new collection method incorporates only valid data. Furthermore it can be seen that 6 and 8 are the 'best' frequencies. But how much do they actually deviate from each other?
+
+```{r calibration scatter, echo=FALSE}
+# Make Plots -------------------------------------------------------------------
+# Calibration 4
+plot_4 <- ggplot(cal, aes(x = old_cal_4, y = new_cal_4)) +
+  # Plot Instances
+  geom_point() +
+  # Customize Plot
+  labs(x = 'Old', 
+       y = 'New', 
+       title = 'Calibration Frequency 4') +
+  # Add Smoothed Line
+  geom_smooth(method='auto', se=TRUE, fullrange=FALSE, level=0.95)
+
+# Calibration 6
+plot_6 <- ggplot(cal, aes(x = old_cal_6, y = new_cal_6)) +
+  # Plot Instances
+  geom_point() +
+  # Customize Plot
+  labs(x = 'Old', 
+       y = 'New',
+       title = 'Calibration Frequency 6') + 
+  # Add Smoothed Line
+  geom_smooth(method='auto', se=TRUE, fullrange=FALSE, level=0.95)
+
+# Calibration 8
+plot_8 <- ggplot(cal, aes(x = old_cal_8, y = new_cal_8)) +
+  # Plot Instances
+  geom_point() +
+  # Customize Plot
+  labs(x = 'Old', 
+       y = 'New',
+       title = 'Calibration Frequency 8') + 
+  # Add Smoothed Line
+  geom_smooth(method='auto', se=TRUE, fullrange=FALSE, level=0.95)
+
+# Calibration 10
+plot_10 <- ggplot(cal, aes(x = old_cal_10, y = new_cal_10)) +
+  # Plot Instances
+  geom_point() +
+  # Customize Plot
+  labs(x = 'Old', 
+       y = 'New',
+       title = 'Calibration Frequency 10') + 
+  # Add Smoothed Line
+  geom_smooth(method='auto', se=TRUE, fullrange=FALSE, level=0.95)
+
+# Combine Plots to one
+grid.arrange(plot_4, plot_6, plot_8, plot_10, ncol = 2, nrow = 2)
+```
+
+It seems like except of the frequency 4 the observations between both methods remain proportional such that the expected deviation is rather small. However, based on the new calculation some participants would have needed a different frequency. To get insights about the errors which occured because of the differing methods there were three calculations.
+
+1.  The value of the chosen calibration ($c$) is subtracted from the best calibration ($b$) computed with the new method - $d = b - c$
+
+2.  The average euclidean distance was computed - $\bar{d} = \frac{1}{n-1} \sum_{i=2}^{n} \sqrt{(P_{chosen} - P_{i})^2}$
+
+3.  $\bar{d}$ is normalized by the mean hrv of the new method $\bar{d}_{norm} = \frac{\bar{d}}{\frac{1}{n} \sum_{i=1}^{n} HRV_{new}}$
+
+4.  The proportion of mistakenly assigned frequencies - $\frac{\text{Number of mistakenly assigned cases}}{\text{N}}$
+
+```{r calibration deviation, echo=FALSE}
+# Make Plots -------------------------------------------------------------------
+# Deviation
+plot_dev <- ggplot(cal, aes(y = deviation)) +
+  # Make Boxplot
+  geom_boxplot(fill = 'deepskyblue2') +
+  # Change Axis Settings
+  scale_x_discrete() +
+  # Customize Plot
+  labs(y = 'Deviation', x = 'Deviation (Simple Difference)')
+
+# Euclidean Distance
+plot_devn <- ggplot(cal, aes(y = euc_dist)) +
+  # Make Boxplot
+  geom_boxplot(fill = 'deepskyblue2') +
+  # Change Axis Settings
+  scale_x_discrete() +
+  # Customize Plot
+  labs(y = 'Deviation', x = 'Mean Euclidean Distance')
+
+# Normalized Euclidean Distance
+plot_devn2 <- ggplot(cal, aes(y = euc_norm)) +
+  # Make Boxplot
+  geom_boxplot(fill = 'deepskyblue2') +
+  # Change Axis Settings
+  scale_x_discrete() +
+  # Customize Plot
+  labs(y = 'Deviation', x = 'Normalized Euclidean Distance')
+
+# Combine plots side by side
+grid.arrange(plot_dev + theme(title = element_text(size = 8)),
+             plot_devn + theme(title = element_text(size = 8)),
+             plot_devn2 + theme(title = element_text(size = 8)),
+             ncol = 3)
+```
+
+It can be seen, that the deviation is zero for the most values and normalizing the euclidean distance removes the most outliers. Considering the \~15 participants with incorrect values from the old method, it can be concluded, that the subjective as well as the objective calibration values are quite close. Now the frequency of misclassified participants will be reported.
+
+```{r misclassification, echo=FALSE}
+# Get the cases which chose to get another frequency than calculated
+# Prepare ----------------------------------------------------------------------
+hrv_mat       <- as.matrix(cal[c('old_cal_4','old_cal_6',
+                                 'old_cal_8','old_cal_10')])
+max_col_names <- colnames(hrv_mat)[max.col(hrv_mat)]
+freq          <- as.numeric(str_extract(max_col_names, '\\d+\\.?\\d*'))
+cal$frec_cal  <- freq 
+
+# Subset Data
+cal_sub       <- cal[cal$chosen_rate==cal$frec_cal,]
+
+# Calculate --------------------------------------------------------------------
+# Number of Misclassifications
+no_mis        <- sum(cal_sub$chosen_rate != cal_sub$best_rate)
+# Proportion of Misclassifications
+freq_mis      <- no_mis/80
+```
+
+There are `r no_mis` misclassifications which means a frequency of `r freq_mis`. Therefore it has to be concluded, that the calibration lacks in validity for a reasonable amount of participants. Therefore it has to be considered, to take this variable into consideration for a control in the final model. In the next step, the frequency of the choice for the breathing rate will be plotted.
+
+```{r plot breathing rate frequency, echo=FALSE}
+# Make Plot --------------------------------------------------------------------
+ggplot(data=cal, aes(x = as.factor(chosen_rate), fill = as.factor(chosen_rate))) +
+  # Make Barplot
+  geom_bar(fill = '#00A36C', colour = 'black') + 
+  # Customize Plot
+  labs(title = 'Frequency of Chosen Breathing Rate',
+       x = 'Breathing Rate', y = 'Frequency') + 
+  # Change Axis Settings
+  ylim(0,40)
+```
+
+As previously seen given the higher HRVs for the breathing rates 6 and 8, they were the most chosen ones. Also the participants who chose the color, preferred the rates in the middle rather than 4 or 10. Next the selected color and brightness settings will be plotted.
+
+```{r plotting color, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Reorder the levels of the factor variable based on frequency
+data <- data %>%
+  mutate(color = factor(color, levels = names(sort(table(color), decreasing = TRUE))))
+
+# Make Plot --------------------------------------------------------------------
+ggplot(data=data, aes(x = as.factor(color), fill = as.factor(color))) + 
+  # Make Barplot
+  geom_bar(fill = c('#FFBF00', 'green','orange','blue', 'purple','#FCE205',
+                    '#02D8E9','cyan','#00A36C', '#008080', '#f653a6', 'white',
+                    'deeppink','red'), colour = 'black') + 
+  # Customize Plot
+  labs(title = 'Frequency of Chosen Color',
+       x = 'Color', y = 'Choose-Frequency') + 
+  # Change Axis Settings
+  ylim(0,20) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+Amber was the color which was chosen the most while read was chosen only once. It seems like warm colors from the yellow spectrum were preferred. Now the brightness will be displayed.
+
+```{r plot brightness, echo=FALSE}
+# Make Plot --------------------------------------------------------------------
+ggplot(data, aes(y = brightness)) +
+  # Make Boxplot
+  geom_boxplot(fill = 'deepskyblue2') +
+  # Customize Plot
+  scale_x_discrete() +
+  labs(y = 'Brightness',
+       title = 'Boxplot for Brightness-Setting')
+```
+
+Except of one participant the brightness was reduced and most participants chose a brightness around 30-40% which could mean, that it has to be considered in the following analysis as the lamps always were turned on to 100% which could have led to disturbances, poorer performance and bad feelings.
+
+```{r Clean Environment 7, echo=FALSE}
+# Clean Environment
+rm(list = ls()[!ls() %in% c('data', 'hrv', 'cal')])
+```
+
+# Heart Rate
+
+The heart rate variability (HRV) is the main dependent variable in this study. The main question is, if the light condition with the request to follow the breathing rate increases the HRV, which would indicate that the light condition leads to physiological relaxation. In this study are three parts in which this separation is relevant. In Study Part I the breaks after stress induction were assessed with or without intervention. This part is relevant to derive if breathing with the light is able to amplify recovery. In Study Part II the conditions vary while the participants had to perform tests so that this part is relevant to decrease the stress induced by demanded performance.
+
+## CPT
+### Time Course
+Lets first inspect the course of HR and HRV over the time during CPT
+
+```{r, HR & HRV course in CPT, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Get Data
+cpt_hr_time <- read.csv(paste0(getwd(),'/data/heartrate/HR_over_time.csv'))
+
+# Make Plot --------------------------------------------------------------------
+# Set value to scale data
+coeff <- 2.3
+
+# Plot
+ggplot(cpt_hr_time[1:190,], aes(x = time)) +
+  # Make Lineplot
+  geom_line(aes(y = hr, color = "Average HR"), 
+            show.legend = TRUE) + 
+  geom_line(aes(y = hrv * coeff, color = "HRV"), 
+            show.legend = TRUE) +
+  # Add vertical line at second 10
+  geom_vline(xintercept = 10, linetype = "dashed", color = "black", 
+             show.legend = TRUE) +
+  # Add second Y axis
+  scale_y_continuous(
+    # Features of the first axis
+    name = "Heart Rate",
+    # Add a second axis and specify its features
+    sec.axis = sec_axis(~./coeff, name = "Heart Rate Variability (HRV)")
+  ) +
+  # Customize Plot
+  labs(x = 'Time (sec)',
+       title = 'HR and HRV by Time at CPT',
+       color = "Legend") +
+  # Set Legend
+  scale_color_manual(
+    values = c("blue", "red", "black"),
+    labels = c("Heartate", "Heart Rate Variability", "CPT-Onset")
+  ) +
+  theme(legend.position = "bottom")
+```
+
+Here we can see, that immediately after the onset of the CPT the HR increases, while the HRV decreases. However after 40 seconds of CPT-Onset (black dashed line) participants started to regenerate. This pattern leads to the assumption, that only the beginning of the CPT and probably also the instructions/expectancy of the test were stressful but there was a habituation effect.
+
+### Line Plot
+```{r line plot CPT HRV, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Compute Baseline Scores
+bas_col <- grep('*new*', names(cal), value = TRUE)
+hrv$bas <- rowMeans(cal[bas_col])
+
+# Reshape the data
+hrv_reshaped <- hrv %>%
+  pivot_longer(cols = starts_with("break"),
+               names_to = "type",
+               values_to = "break_hr") %>%
+  filter(version == ifelse(type == "break_l", 1, 2)) %>%
+  select(-version, -type)
+
+# Prepare Dataframe
+hrv_fin <- merge(data[,c('ID', 'version', 'sex', 'brightness')], 
+                 hrv_reshaped[,c('ID', 'bas', 'cpt', 'break_hr')], 
+                 on='ID')
+
+# Reshape Data
+hrv_cpt_line <- hrv_fin %>%
+  group_by(version, sex) %>%
+  summarise(
+    Bas_mean = mean(bas, na.rm = TRUE),
+    CPT_mean = mean(cpt, na.rm = TRUE),
+    Break_mean = mean(break_hr, na.rm = TRUE),
+    Bas_sd = sd(bas, na.rm = TRUE),
+    CPT_sd = sd(cpt, na.rm = TRUE),
+    Break_sd = sd(break_hr, na.rm = TRUE),
+    .groups = 'drop'
+  ) %>%
+  ungroup() %>%
+  pivot_longer(
+    cols = contains(c('mean', 'sd')),
+    names_to = c('time', '.value'),
+    names_pattern = '(.*)_(.*)'
+  ) %>%
+  mutate(version = factor(version, labels = c('Light', 'Non-Light')),
+         sex = factor(sex, labels = c('Male', 'Female')), # Adjust as per your dataset
+         time = factor(time, levels = c('Bas', 'CPT', 'Break'))
+  )
+
+# Prepare Colors
+palette <- brewer.pal(11,'Paired')
+
+# Accessing specific colors
+color1 <- palette[1]
+color2 <- palette[2]
+color3 <- palette[7]
+color4 <- palette[8]
+
+# Make Plot --------------------------------------------------------------------------
+ggplot(data = hrv_cpt_line, aes(x = time,
+                                y = mean,
+                                group = interaction(version, sex),
+                                colour = interaction(version, sex),
+                                shape = interaction(version, sex))) +
+  # Make Lineplot
+  geom_line(linewidth = 1) + 
+  # Add Points
+  geom_point(size = 2) +
+  # Add Errorbars
+  geom_errorbar(aes(ymin = mean - sd, ymax = mean + sd), width = 0.2) +
+  # Customize Plot Colors
+  scale_colour_manual(values = c('Light.Male' = color1, 
+                                 'Non-Light.Male' = color2,
+                                 'Light.Female' = color3, 
+                                 'Non-Light.Female' = color4)) +
+  # Customize Plot points
+  scale_shape_manual(values = c('Light.Male' = 16, 
+                                'Non-Light.Male' = 17,
+                                'Light.Female' = 16, 
+                                'Non-Light.Female' = 17)) +
+  # Plot Labels and Titles
+  labs(x = 'Time', 
+       y = 'Stress (HRV)',
+       title = 'Stress by Time and Sex - CPT',
+       colour = 'Group',
+       shape = 'Group') +
+  # Change legend position
+  theme(legend.position = 'bottom')
+```
+The line plot shows, that there might be a main effect of sex on HRV and the increase of HRV from CPT to the break is significantly steeper than in the non-light condition. Therefore a there might be an interaction effect of time*condition, which will be tested with two linear mixed models.
+
+
+### Linear Model
+
+In the next stept we assess the stress-response (HRV) of CPT compared to the baseline and the following break. The baseline is operationalized as the average HRV over all calibrations.
+
+```{r model study part I, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Get Long Format
+hrv_long <- gather(hrv_fin, key=time, value=score, 
+                   bas,cpt,break_hr) %>%
+  arrange(ID)
+
+# Fit Model --------------------------------------------------------------------
+model <- lmer(score ~ time + version + sex + (1|ID), data = hrv_long)
+
+# Evaluate ---------------------------------------------------------------------
+# Print Results
+rsq.lmm(model)
+summary(model)
+
+# Plot Diagnostics
+gglm(model)
+```
+
+This model proves, that there is are two main effects (time & sex). The CPT significantly reduced the HRV compared to the baseline and women in general tend to show lower HRV. There is no effect of condition yet but this could only appear in the post-hoc test assessing the HRV change from CPT to break as the intervention was only applied in this timestep.
+
+```{r linear mixed model HRV CPT post/break, echo=FALSE}
+# Preparation ------------------------------------------------------------------
+# Subset DataFrame
+data_subset <- hrv_long[hrv_long$time != 'bas',]
+
+# Factorize Time Column
+data_subset$time <- relevel(factor(data_subset$time), ref = "cpt")
+
+# Fit Model---------------------------------------------------------------------
+# Model
+model <- lmer(score ~ version * time + sex * version + (1 | ID), data = data_subset)
+
+# Assess Results----------------------------------------------------------------
+# Print Results
+rsq.lmm(model)
+summary(model)
+
+# Add Diagnostics---------------------------------------------------------------
+# Check for multicollinearity
+vif(model)
+# Plot Diagnostics
+gglm(model)
+```
+
+The post hoc test reveals, that there is still a main effect of time and sex. The HRV was significantly higher during the break compared to the CPT. While there is no main effect of condition, the interaction of time with condition is significant, which means, that the change in HRV combined with ne non-light condition is detrimental to the HRV change and participants in the light condition recovered better.
+
+### Paired Plot
+
+```{r paired plot CPT, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Set Up Dataframe
+paired_data <- data.frame(ID = hrv_fin$ID,
+                          version = hrv_fin$version,
+                          CPT = hrv_fin$cpt, 
+                          Break = hrv_fin$break_hr)
+
+# Remove NAs
+paired_data <- na.omit(paired_data)
+
+# Make Plot --------------------------------------------------------------------
+paired_plot <- ggplot(paired_data, aes(x = Break, y = CPT)) +
+  # Plot Data Instances
+  geom_point() +
+  # Plot Diagonal Line
+  geom_abline(intercept = 0, slope = 1, color = 'red') +
+  # Customize Plot
+  labs(x = 'Break',
+       y = 'CPT',
+       title = 'Paired Plot - CPT') +
+  xlim(0, 160) + ylim(0, 160) +
+  # Fit Plots for each Version in one Plot
+  facet_wrap(~ version,
+             labeller = labeller(version = c("1" = "Light", "2" = "Non-Light")))
+
+# Display the plot
+print(paired_plot)
+```
+
+Also the paired plot reveals that the effect of the break in the light condition is significantly stronger in increasing the HRV compared the CPT.
+
+```{r Clean Environment 8, echo=FALSE}
+# Clean Environment
+rm(list = ls()[!ls() %in% c('data', 'hrv', 'cal', 'hrv_mer')])
+```
+
+## PASAT
+### Time Course
+```{r, HR & HRV course in PASAT, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Get Data
+pasat_hr_time <- read.csv(paste0(getwd(),'/data/heartrate/PASAT_HR_time.csv'))
+
+# Make Plot --------------------------------------------------------------------
+# Set value to scale data
+coeff <- 3
+
+# Plot
+ggplot(pasat_hr_time[0:1100,], aes(x = time)) +
+  # Make Lineplot
+  geom_line(aes(y = hr, color = "Average HR"), 
+            show.legend = TRUE) + 
+  geom_line(aes(y = hrv * coeff, color = "HRV"), 
+            show.legend = TRUE) +
+  # Add second Y axis
+  scale_y_continuous(
+    # Features of the first axis
+    name = "Heart Rate",
+    # Add a second axis and specify its features
+    sec.axis = sec_axis(~./coeff, name = "Heart Rate Variability (HRV)")
+  ) +
+  # Customize Plot
+  labs(x = 'Time (sec)',
+       title = 'HR and HRV by Time at PASAT',
+       color = "Legend") +
+  # Set Legend
+  scale_color_manual(
+    values = c("blue", "red"),
+    labels = c("Heartate", "Heart Rate Variability")
+  ) +
+  theme(legend.position = "bottom")
+```
+
+The time course of the HR and HRV reveals that the HR is rising directly after PASAT onset and HRV is dropping. However the HR is constantly dropping after its peak at second 150. The HRV stays low over the whole PASAT except for the sequence around 580 sec, where a longer instruction for Level 3 is given. When the task sets on again, HRV is dropping.
+
+### Line Plot
+```{r line plot PASAT HRV, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Reshape the data
+hrv_reshaped <- hrv %>%
+  pivot_longer(cols = starts_with("break"),
+               names_to = "type",
+               values_to = "break_hr") %>%
+  filter(version == ifelse(type == "break_l", 2, 1)) %>%
+  select(-version, -type)
+
+# Prepare Dataframe
+hrv_fin <- merge(data[,c('ID', 'version', 'sex', 'brightness')], 
+                 hrv_reshaped[,c('ID', 'bas', 'pasat', 'break_hr')], 
+                 on='ID')
+
+# Reshape Data
+hrv_cpt_line <- hrv_fin %>%
+  group_by(version, sex) %>%
+  summarise(
+    Bas_mean = mean(bas, na.rm = TRUE),
+    PASAT_mean = mean(pasat, na.rm = TRUE),
+    Break_mean = mean(break_hr, na.rm = TRUE),
+    Bas_sd = sd(bas, na.rm = TRUE),
+    PASAT_sd = sd(pasat, na.rm = TRUE),
+    Break_sd = sd(break_hr, na.rm = TRUE),
+    .groups = 'drop'
+  ) %>%
+  ungroup() %>%
+  pivot_longer(
+    cols = contains(c('mean', 'sd')),
+    names_to = c('time', '.value'),
+    names_pattern = '(.*)_(.*)'
+  ) %>%
+  mutate(version = factor(version, labels = c('Non-Light', 'Light')),
+         sex = factor(sex, labels = c('Male', 'Female')), # Adjust as per your dataset
+         time = factor(time, levels = c('Bas', 'PASAT', 'Break'))
+  )
+
+# Prepare Colors
+palette <- brewer.pal(11,'Paired')
+
+# Accessing specific colors
+color1 <- palette[1]
+color2 <- palette[2]
+color3 <- palette[7]
+color4 <- palette[8]
+
+# Make Plot --------------------------------------------------------------------------
+ggplot(data = hrv_cpt_line, aes(x = time,
+                                y = mean,
+                                group = interaction(version, sex),
+                                colour = interaction(version, sex),
+                                shape = interaction(version, sex))) +
+  # Make Lineplot
+  geom_line(linewidth = 1) + 
+  # Add Points
+  geom_point(size = 2) +
+  # Add Errorbars
+  geom_errorbar(aes(ymin = mean - sd, ymax = mean + sd), width = 0.2) +
+  # Customize Plot Colors
+  scale_colour_manual(values = c('Light.Male' = color1, 
+                                 'Non-Light.Male' = color2,
+                                 'Light.Female' = color3, 
+                                 'Non-Light.Female' = color4)) +
+  # Customize Plot points
+  scale_shape_manual(values = c('Light.Male' = 16, 
+                                'Non-Light.Male' = 17,
+                                'Light.Female' = 16, 
+                                'Non-Light.Female' = 17)) +
+  # Plot Labels and Titles
+  labs(x = 'Time', 
+       y = 'Stress (HRV)',
+       title = 'Stress by Time and Sex - PASAT',
+       colour = 'Group',
+       shape = 'Group') +
+  # Change legend position
+  theme(legend.position = 'bottom')
+```
+
+The line plot shows, that the HRV is dropping due to the PASAT and rising in all conditions and for all sexes from PASAT to the break. However it again seems like women tend to have generally lower HRV and the light break has a stronger recovering effect.
+
+### Linear Model
+Now the model for the light effect on the HRV during PVT will be fitted.
+
+```{r model study part II, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Get Long Format
+hrv_long <- gather(hrv_fin, key=time, value=score, 
+                   bas,pasat,break_hr) %>%
+  arrange(ID)
+
+# Fit Model --------------------------------------------------------------------
+model <- lmer(score ~ time + version + sex + (1|ID), data = hrv_long)
+
+# Evaluate ---------------------------------------------------------------------
+# Print Results
+rsq.lmm(model)
+summary(model)
+
+# Plot Diagnostics
+gglm(model)
+```
+
+The linear model reveals that the PASAT significantly reduced the HRV. All other predictors did not show any effect on HRV such that there is no effect on condition but this will be tested in the post hoc test.
+
+```{r linear mixed model HRV PASAT post/break, echo=FALSE}
+# Preparation ------------------------------------------------------------------
+# Subset DataFrame
+data_subset <- hrv_long[hrv_long$time != 'bas',]
+
+# Factorize Time Column
+data_subset$time <- relevel(factor(data_subset$time), ref = "pasat")
+
+# Fit Model---------------------------------------------------------------------
+# Model
+model <- lmer(score ~ version * time + sex * version + (1 | ID), data = data_subset)
+
+# Assess Results----------------------------------------------------------------
+# Print Results
+rsq.lmm(model)
+summary(model)
+
+# Add Diagnostics---------------------------------------------------------------
+# Check for multicollinearity
+vif(model)
+# Plot Diagnostics
+gglm(model)
+```
+
+The post-hoc tests reveals that the HRV in the break after the PASAT was higher. The main effect of sex remained and the interaction effect of condition and time is significant in the expected direction such that participants in the light condition recovered stronger than participants in the still sitting break.
+
+The Residuals vs. Fitted plot still shows that the errors approximately have a mean at zero but for higher fitted values the residuals tend to go up. The QQ-Plot reveals approximate $\mathcal{N}$ of the standardized residuals but there seems to be a stronger skewness compared to the previous model. Further the Scale-Location Plot reveals a weak trend towards higher residuals for higher fitted values.
+
+### Paired Plot
+
+To visualize the effect of the light condition on HRV, this will be plotted with a paired plot and assessed additionally with a paired t-test.
+
+```{r paired plot PASAT, echo=FALSE}
+# Create a data frame
+paired_data <- data.frame(ID = hrv_fin$ID,
+                          version = hrv_fin$version,
+                          CPT = hrv_fin$pasat, 
+                          Break = hrv_fin$break_hr)
+
+# Remove NAs
+paired_data <- na.omit(paired_data)
+
+# Create ggplot object for paired plot
+paired_plot <- ggplot(paired_data, aes(x = Break, y = CPT)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, color = 'red') +
+  labs(x = 'Break',
+       y = 'CPT',
+       title = 'Paired Plot - CPT') +
+  xlim(0, 160) + ylim(0, 160) +
+  facet_wrap(~ version,
+             labeller = labeller(version = c("1" = "Non-Light", "2" = "Light")))
+
+# Display the plot
+print(paired_plot)
+```
+
+It is clearly observable, that the HRV difference is higher in the light condition.
+
+```{r Clean Environment 9, echo=FALSE}
+# Clean Environment
+rm(list = ls()[!ls() %in% c('data', 'hrv', 'cal')])
+```
+
+## PVT
+### Linear Model
+
+Now the model for the light effect on the HRV during PVT will be fitted.
+
+```{r model study part II PVT, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Set Up Dataframes
+hrv_mer <- merge(data,hrv, on='ID')
+hrv_fin <- hrv_mer[c('ID',
+                     'sex', 
+                     'version',
+                     'brightness',
+                     'bas',
+                     'pvt_l', 
+                     'pvt_nl')]
+
+# Get Long Format
+hrv_long <- gather(hrv_fin, key=mode, value=score, 
+                   bas,pvt_l,pvt_nl) %>% 
+  arrange(ID)
+
+# Fit Model --------------------------------------------------------------------
+model <- lmer(score ~ mode + mode*sex + (1|ID), data = hrv_long)
+
+# Evaluate ---------------------------------------------------------------------
+# Print Results
+rsq.lmm(model)
+summary(model)
+
+# Plot Diagnostics
+gglm(model)
+```
+
+Here we can see, that the light intervention also significantly increased the HRV during the PVT. The non-light condition did not differ significantly from the baseline. If the HRV differs between both conditions during the PVT has to be assessed by another paired t test. But first look at the diagnostic plots for the model.
+
+The diagnostics for this model are less promising than in the previous model. However, the are not too bad. The Residuals vs. Fitted plot still shows that the errors approximately have a mean at zero but for higher fitted values the residuals tend to go up. The QQ-Plot reveals approximate $\mathcal{N}$ of the standardized residuals but there seems to be a stronger skewness compared to the previous model. Further the Scale-Location Plot reveals a weak trend towards higher residuals for higher fitted values. The Residual vs. Leverage plot is still not interpretable.
+
+### Paired Plot
+
+To visualize the effect of the light condition on HRV, this will be plotted with a paired plot and assessed additionally with a paired t-test.
+
+```{r paired plot PVT, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Create a data frame
+paired_data <- data.frame(Light = hrv$pvt_l,
+                          Non_Light = hrv$pvt_nl)
+
+# Remove NAs
+paired_data <- na.omit(paired_data)
+
+# Make Plot --------------------------------------------------------------------
+paired_plot <- ggplot(paired_data, aes(x = Light, y = Non_Light)) +
+  # Plot Instances
+  geom_point() +
+  # Plot Diagonal Line
+  geom_abline(intercept = 0, slope = 1, color = "red") +
+  # Customize Plot
+  labs(x = "Light-Intervention",
+       y = "Non-Light",
+       title = "Paired Plot - PVT") +
+  xlim(0, 160) + ylim(0, 160)
+
+# Display the plot
+print(paired_plot)
+```
+
+```{r TTest HRV in PVT, echo=FALSE}
+# Prepare ----------------------------------------------------------------------
+# Set up Dataframe
+hrv_long <- data.frame(cond = as.factor(c(rep('light', nrow(paired_data)),
+                                          rep('nlight', nrow(paired_data)))),
+                       value = c(paired_data$Light,
+                                 paired_data$Non_Light))
+
+# t-test -----------------------------------------------------------------------
+print('t-test for PVT with Light vs. Non-Light')
+t.test(value ~ cond, data = hrv_long, paired = TRUE)
+```
+
+It is clearly observable, that the HRV is lower in the non-light condition during the break.
+
+```{r Clean Environment 10, echo=FALSE}
+# Clean Environment
+rm(list = ls()[!ls() %in% c('data', 'hrv', 'cal', 'hrv_mer')])
+```
+
+## BART
+
+### Linear Model
+
+Now the model for the light effect on the HRV during BART will be fitted.
+
+```{r model study part II BART, echo=FALSE}
+# Prepare ---------------------------------------------------------------------- 
+# Set Up Dataframe
+hrv_fin <- hrv_mer[c('ID',
+                     'sex',
+                     'version',
+                     'brightness', 
+                     'bas', 
+                     'bart_l', 
+                     'bart_nl')]
+
+# Get Long Format
+hrv_long <- gather(hrv_fin, key=mode, value=score, 
+                   bas,bart_l,bart_nl) %>% 
+  arrange(ID)
+
+# Factorize Mode
+hrv_long$mode <- factor(hrv_long$mode, levels = c('bas','bart_l','bart_nl'))
+
+# Fit Model --------------------------------------------------------------------
+model <- lmer(score ~ mode*sex + (1|ID), data = hrv_long)
+
+# Evaluate ---------------------------------------------------------------------
+# Print Results
+rsq.lmm(model)
+summary(model)
+
+# Plot Diagnostics
+gglm(model)
+```
+
+Again, the model reveals a significant increase in HRV in the light condition. There is no significant difference in the non-light condition. If the HRV differs between both conditions during the PVT has to be assessed by another paired t test. But first look at the diagnostic plots for the model.
+
+Here it again seems like the assumptions are met. The errors center around zero, the residuals are approximately $\mathcal{N}$, no trend seems to be observable in the scale-location plot. Again the Residual vs. Leverage Plot is not interpretable yet.
+
+### Paired Plot
+
+To visualize the effect of the light condition on HRV, this will be plotted with a paired plot and assessed additionally with a paired t-test.
+
+```{r HRV in BART, echo=FALSE}
+### Bart ###
+# Create a data frame
+paired_data <- data.frame(Light = hrv$bart_l,
+                          Non_Light = hrv$bart_nl)
+
+# Remove NAs
+paired_data <- na.omit(paired_data)
+
+# Create ggplot object for paired plot
+paired_plot <- ggplot(paired_data, aes(x = Light, y = Non_Light)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, color = 'red') +
+  labs(x = 'Light-Intervention',
+       y = 'Non-Light',
+       title = 'Paired Plot - BART') +
+  xlim(0, 160) + ylim(0, 160)
+
+# Display the plot
+print(paired_plot)
+```
+
+```{r TTest HRV in BART, echo=FALSE}
+### Inference Test
+hrv_long <- data.frame(cond = as.factor(c(rep('light', nrow(paired_data)),
+                                          rep('nlight', nrow(paired_data)))),
+                       value = c(paired_data$Light,
+                                 paired_data$Non_Light))
+
+print('t-test for BART with Light vs. Non-Light')
+t.test(value ~ cond, data = hrv_long, paired = TRUE)
+```
+
+It is clearly observable, that the HRV is lower in the non-light condition during the break.
+
+# Conclusion
+
+The key points to take away are
+
+-   Randomization was successful
+-   In CPT stress induction was not successful for subjective stress assessment but for objective stress assessment (HRV), PASAT was able to induce stress both subjectively and objectively.
+-   PASAT was stronger in inducing stress and the effect wore off slower
+-   Light intervention possibly had a negative effect on performance (at least for PVT), therefore it is arguable not to use the RT500 measures as they remove the mistakes or at least incorporate lapses in inference analysis
+-   Participants felt slightly better after the light break (KAB) but there might be an effect of version (CPT or PASAT) and the difference might not be statistically different
+-   User Experience (UEQ) was mixed with no clear trend towards the acceptability of the light intervention. CAUTION: Light intensity could play a role here
+-   Light did not cause headaches nor eye issues, however was distracting - see Inquisit Tests
+-   Best performing breathing rates were 6 or 8, but chosen breathing rates have to be considered cautiously as there were problems with assessment particularly in the beginning of the study.
+-   Warm colors of the yellow spectrum were preferred
+-   Light intervention was consistently found to increase HRV after and during stressors
+-   Sex tended to influence the HRV such that women were more prone to objective stress but the differences did not reveal significance.
