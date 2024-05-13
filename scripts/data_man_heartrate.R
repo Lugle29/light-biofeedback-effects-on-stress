@@ -390,6 +390,7 @@ avg_hrv$break_nl <- avgs[['nlight']]
 # Clean Environment
 rm(list = ls()[!ls() %in% c('data', 'quest', 'avg_hrv', 'avg_vec', 'list_hrv',
                             'plot_path')])
+
 ################################### Study Part II ##############################
 ### PVT ###
 # Prepare ----------------------------------------------------------------------
