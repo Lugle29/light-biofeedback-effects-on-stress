@@ -442,3 +442,56 @@ write_xlsx(avg_hrv, 'heartrate/average_hrv.xlsx')
 hrv <- avg_hrv
 na_indices <- which(apply(hrv, 1, function(row) any(is.na(row))))
 hrv$ID[na_indices]
+
+############################ Heart Rate by Time ################################
+### CPT ###
+# Prepare ----------------------------------------------------------------------
+# Get Functions
+setwd(paste0(dirname(getwd()),'/scripts'))
+source('functions.R')
+
+# Subset Data
+cpt <- data[data$TLPLOGEvent == 'CPT-Start',]
+
+# Obtain Data ------------------------------------------------------------------
+# List relevant Vectors
+hr_time <- list_hr_time(cpt)
+
+# Turn list into dataframe
+## HR
+hr_df <- hr_bytime(hr_time, 'hr')
+## HRV
+hrv_df <- hr_bytime(hr_time, 'hrv')
+
+# Prepare Data for Plotting
+cpt_hr <- merge(hr_df[,c('time', 'hr')], 
+                hrv_df[,c('time', 'hrv')], 
+                on = 'time')
+
+# Save -------------------------------------------------------------------------
+setwd(paste0(dirname(getwd()),'/data'))
+write.csv(cpt_hr, 'heartrate/CPT_HR_time.csv', row.names = FALSE)
+
+### PASAT ###
+# Prepare ----------------------------------------------------------------------
+# Subset Data
+pasat <- data[data$TLPLOGEvent == 'PASAT-Start',]
+
+# Obtain Data ------------------------------------------------------------------
+# List relevant Vectors
+hr_time <- list_hr_time(pasat)
+
+# Turn list into dataframe
+## HR
+hr_df <- hr_bytime(hr_time, 'hr')
+## HRV
+hrv_df <- hr_bytime(hr_time, 'hrv')
+
+# Prepare Data for Plotting
+pasat_hr <- merge(hr_df[,c('time', 'hr')],
+                  hrv_df[,c('time', 'hrv')],
+                  on = 'time')
+
+# Save -------------------------------------------------------------------------
+setwd(paste0(dirname(getwd()),'/data'))
+write.csv(pasat_hr, 'heartrate/PASAT_HR_time.csv', row.names = FALSE)
